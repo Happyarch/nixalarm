@@ -144,6 +144,9 @@ Example:
 
 ```toml
 alarm_source = "generated"
+# Desktop/no-argument launches use alarms. Leave empty for clock-only.
+alarms = ["07:30", "5:30 PM"]
+# Backward-compatible single-alarm key. Used only when alarms is omitted.
 alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
@@ -157,6 +160,7 @@ width = 800
 height = 360
 fullscreen = false
 always_on_top = false
+flash_hz = 2.0
 
 [style]
 theme = "terminal_glow"

@@ -35,7 +35,7 @@ using Clock = std::chrono::system_clock;
 
 constexpr int kAudioRate = 48000;
 constexpr SDL_AudioFormat kAudioFormat = AUDIO_S16SYS;
-constexpr int kAudioChannels = 1;
+constexpr int kAudioChannels = 2;
 
 struct Color {
   Uint8 r = 0;
@@ -59,6 +59,8 @@ struct Source {
 struct Config {
   std::string alarm_source = "generated";
   std::string alarm_time = "07:30";
+  std::vector<std::string> alarms;
+  bool alarms_set = false;
   int snooze_minutes = 10;
   int hold_to_stop_seconds = 10;
   double volume = 0.9;
@@ -69,6 +71,7 @@ struct Config {
   int height = 360;
   bool fullscreen = false;
   bool always_on_top = false;
+  double flash_hz = 2.0;
   std::string theme = "terminal_glow";
   Color background{7, 24, 11, 255};
   Color segment_on{108, 255, 87, 255};
@@ -181,6 +184,9 @@ static std::string default_config_text() {
       "# See nixalarm(5) for the full format.\n"
       "\n"
       "alarm_source = \"generated\"\n"
+      "# Desktop/no-argument launches use alarms. Leave empty for clock-only.\n"
+      "alarms = [\"07:30\"]\n"
+      "# Backward-compatible single-alarm key. Used only when alarms is omitted.\n"
       "alarm_time = \"07:30\"\n"
       "snooze_minutes = 10\n"
       "hold_to_stop_seconds = 10\n"
@@ -194,6 +200,7 @@ static std::string default_config_text() {
       "height = 360\n"
       "fullscreen = false\n"
       "always_on_top = false\n"
+      "flash_hz = 2.0\n"
       "\n"
       "[style]\n"
       "theme = \"terminal_glow\"\n"
@@ -235,6 +242,46 @@ static void seed_default_config_if_missing(const fs::path& path) {
   std::cerr << "nixalarm: created default config: " << path << "\n";
 }
 
+static std::vector<std::string> parse_string_list(const std::string& raw) {
+  std::string s = trim(raw);
+  std::vector<std::string> out;
+  if (s.size() < 2 || s.front() != '[' || s.back() != ']') return out;
+  s = s.substr(1, s.size() - 2);
+  std::string current;
+  char quote = 0;
+  bool escaping = false;
+  for (char c : s) {
+    if (escaping) {
+      current.push_back(c);
+      escaping = false;
+      continue;
+    }
+    if (quote && c == '\\') {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (c == quote) quote = 0;
+      else current.push_back(c);
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      quote = c;
+      continue;
+    }
+    if (c == ',') {
+      std::string item = trim(current);
+      if (!item.empty()) out.push_back(item);
+      current.clear();
+      continue;
+    }
+    current.push_back(c);
+  }
+  std::string item = trim(current);
+  if (!item.empty()) out.push_back(item);
+  return out;
+}
+
 static Config load_config(const fs::path& path) {
   Config cfg;
   cfg.sources = builtin_sources();
@@ -271,6 +318,10 @@ static Config load_config(const fs::path& path) {
       if (section.empty()) {
         if (key == "alarm_source") cfg.alarm_source = unquote(val);
         else if (key == "alarm_time") cfg.alarm_time = unquote(val);
+        else if (key == "alarms") {
+          cfg.alarms = parse_string_list(val);
+          cfg.alarms_set = true;
+        }
         else if (key == "snooze_minutes") cfg.snooze_minutes = std::max(1, std::stoi(val));
         else if (key == "hold_to_stop_seconds") cfg.hold_to_stop_seconds = std::max(1, std::stoi(val));
         else if (key == "volume") cfg.volume = std::clamp(std::stod(val), 0.0, 1.0);
@@ -282,6 +333,7 @@ static Config load_config(const fs::path& path) {
         else if (key == "height") cfg.height = std::max(160, std::stoi(val));
         else if (key == "fullscreen") cfg.fullscreen = parse_bool(val);
         else if (key == "always_on_top") cfg.always_on_top = parse_bool(val);
+        else if (key == "flash_hz") cfg.flash_hz = std::max(0.0, std::stod(val));
       } else if (section == "style") {
         if (key == "theme") {
           std::string theme = unquote(val);
@@ -333,6 +385,10 @@ class AudioPlayer {
       std::cerr << "nixalarm: audio open failed: " << SDL_GetError() << "\n";
       return false;
     }
+    std::cerr << "nixalarm: audio driver=" << (SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "unknown")
+              << " freq=" << have_.freq
+              << " channels=" << static_cast<int>(have_.channels)
+              << " samples=" << have_.samples << "\n";
     SDL_PauseAudioDevice(device_, 0);
     return true;
   }
@@ -382,14 +438,15 @@ class AudioPlayer {
   bool play_generated() {
     double phase = 0.0;
     const double two_pi = 6.283185307179586;
-    std::vector<int16_t> buf(1024);
+    std::vector<int16_t> buf(1024 * kAudioChannels);
     while (!stopping_) {
       auto now = Clock::now().time_since_epoch();
       auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
       double freq = ((ms / 450) % 2 == 0) ? 880.0 : 660.0;
-      for (auto& sample : buf) {
+      for (size_t i = 0; i < buf.size(); i += kAudioChannels) {
         double gate = ((ms / 900) % 2 == 0) ? 1.0 : 0.35;
-        sample = static_cast<int16_t>(std::sin(phase) * 30000.0 * volume_ * gate);
+        int16_t sample = static_cast<int16_t>(std::sin(phase) * 30000.0 * volume_ * gate);
+        for (int ch = 0; ch < kAudioChannels; ++ch) buf[i + ch] = sample;
         phase += two_pi * freq / kAudioRate;
         if (phase > two_pi) phase -= two_pi;
       }
@@ -433,7 +490,7 @@ class AudioPlayer {
 
     SwrContext* raw_swr = nullptr;
     AVChannelLayout out_layout;
-    av_channel_layout_default(&out_layout, 1);
+    av_channel_layout_default(&out_layout, kAudioChannels);
     AVChannelLayout in_layout = ctx->ch_layout;
     if (in_layout.nb_channels == 0) av_channel_layout_default(&in_layout, ctx->ch_layout.nb_channels ? ctx->ch_layout.nb_channels : 2);
     if (swr_alloc_set_opts2(&raw_swr, &out_layout, AV_SAMPLE_FMT_S16, kAudioRate,
@@ -473,15 +530,15 @@ class AudioPlayer {
         while (!stopping_ && avcodec_receive_frame(ctx.get(), frame.get()) == 0) {
           int out_count = av_rescale_rnd(swr_get_delay(swr.get(), ctx->sample_rate) + frame->nb_samples,
                                          kAudioRate, ctx->sample_rate, AV_ROUND_UP);
-          std::vector<int16_t> out(out_count);
+          std::vector<int16_t> out(out_count * kAudioChannels);
           uint8_t* out_data = reinterpret_cast<uint8_t*>(out.data());
           int converted = swr_convert(swr.get(), &out_data, out_count,
                                       const_cast<const uint8_t**>(frame->extended_data), frame->nb_samples);
           if (converted > 0) {
-            for (int i = 0; i < converted; ++i) {
+            for (int i = 0; i < converted * kAudioChannels; ++i) {
               out[i] = static_cast<int16_t>(std::clamp(out[i] * volume_, -32768.0, 32767.0));
             }
-            queue_bytes(reinterpret_cast<Uint8*>(out.data()), static_cast<Uint32>(converted * sizeof(int16_t)));
+            queue_bytes(reinterpret_cast<Uint8*>(out.data()), static_cast<Uint32>(converted * kAudioChannels * sizeof(int16_t)));
             played = true;
           }
           av_frame_unref(frame.get());
@@ -540,16 +597,16 @@ class AudioPlayer {
       constexpr int frames = 1024;
       std::vector<int16_t> left(frames);
       std::vector<int16_t> right(frames);
-      std::vector<int16_t> mono(frames);
+      std::vector<int16_t> interleaved(frames * kAudioChannels);
       while (!stopping_ && fluid_player_get_status(player) != FLUID_PLAYER_DONE) {
         if (fluid_synth_write_s16(synth, frames, left.data(), 0, 1, right.data(), 0, 1) == FLUID_FAILED) {
           break;
         }
         for (int i = 0; i < frames; ++i) {
-          double mixed = (static_cast<double>(left[i]) + static_cast<double>(right[i])) * 0.5 * volume_;
-          mono[i] = static_cast<int16_t>(std::clamp(mixed, -32768.0, 32767.0));
+          interleaved[i * 2] = static_cast<int16_t>(std::clamp(left[i] * volume_, -32768.0, 32767.0));
+          interleaved[i * 2 + 1] = static_cast<int16_t>(std::clamp(right[i] * volume_, -32768.0, 32767.0));
         }
-        queue_bytes(reinterpret_cast<Uint8*>(mono.data()), static_cast<Uint32>(mono.size() * sizeof(int16_t)));
+        queue_bytes(reinterpret_cast<Uint8*>(interleaved.data()), static_cast<Uint32>(interleaved.size() * sizeof(int16_t)));
         played = true;
       }
       fluid_player_stop(player);
@@ -576,15 +633,18 @@ class AudioPlayer {
       std::cerr << "nixalarm: failed to start rtl_fm\n";
       return false;
     }
-    std::vector<int16_t> buf(2048);
+    std::vector<int16_t> mono(2048);
+    std::vector<int16_t> stereo(mono.size() * kAudioChannels);
     bool played = false;
     while (!stopping_) {
-      size_t n = fread(buf.data(), sizeof(int16_t), buf.size(), pipe);
+      size_t n = fread(mono.data(), sizeof(int16_t), mono.size(), pipe);
       if (n == 0) break;
       for (size_t i = 0; i < n; ++i) {
-        buf[i] = static_cast<int16_t>(std::clamp(buf[i] * volume_, -32768.0, 32767.0));
+        int16_t sample = static_cast<int16_t>(std::clamp(mono[i] * volume_, -32768.0, 32767.0));
+        stereo[i * 2] = sample;
+        stereo[i * 2 + 1] = sample;
       }
-      queue_bytes(reinterpret_cast<Uint8*>(buf.data()), static_cast<Uint32>(n * sizeof(int16_t)));
+      queue_bytes(reinterpret_cast<Uint8*>(stereo.data()), static_cast<Uint32>(n * kAudioChannels * sizeof(int16_t)));
       played = true;
     }
     pclose(pipe);
@@ -649,7 +709,20 @@ static void draw_colon(SDL_Renderer* r, float x, float y, float size, const Conf
 }
 
 static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool ringing, double hold_progress) {
-  set_color(r, cfg.background);
+  bool flash_invert = false;
+  if (ringing && cfg.flash_hz > 0.0) {
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    double phase = std::fmod(ms / 1000.0 * cfg.flash_hz, 1.0);
+    flash_invert = phase >= 0.5;
+  }
+  Color bg = flash_invert ? cfg.segment_on : cfg.background;
+  Config draw_cfg = cfg;
+  if (flash_invert) {
+    draw_cfg.segment_on = cfg.background;
+    draw_cfg.segment_off = cfg.segment_on;
+    draw_cfg.glow = false;
+  }
+  set_color(r, bg);
   SDL_RenderClear(r);
   auto now = Clock::to_time_t(Clock::now());
   std::tm tm{};
@@ -676,16 +749,16 @@ static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool 
   float y = (wh - digit_h) / 2.0f;
   for (char c : text) {
     if (std::isdigit(static_cast<unsigned char>(c))) {
-      draw_digit(r, c - '0', x, y, digit_w, digit_h, cfg);
+      draw_digit(r, c - '0', x, y, digit_w, digit_h, draw_cfg);
       x += digit_w + digit_w * 0.12f;
     } else {
-      draw_colon(r, x + colon_w * 0.25f, y, digit_h, cfg);
+      draw_colon(r, x + colon_w * 0.25f, y, digit_h, draw_cfg);
       x += colon_w + digit_w * 0.12f;
     }
   }
   if (ringing) {
-    Color c = cfg.segment_on;
-    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f, 8, cfg.segment_off);
+    Color c = draw_cfg.segment_on;
+    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f, 8, draw_cfg.segment_off);
     fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f * static_cast<float>(hold_progress), 8, c);
   }
   SDL_RenderPresent(r);
@@ -743,6 +816,31 @@ static std::optional<std::chrono::time_point<Clock>> parse_alarm_time(const std:
   return alarm;
 }
 
+static std::string format_local_time(const std::chrono::time_point<Clock>& t) {
+  std::time_t tt = Clock::to_time_t(t);
+  std::tm tm{};
+  localtime_r(&tt, &tm);
+  std::ostringstream out;
+  out << std::put_time(&tm, "%Y-%m-%d %H:%M:%S %Z");
+  return out.str();
+}
+
+static std::vector<std::chrono::time_point<Clock>> parse_alarm_times(const std::vector<std::string>& times) {
+  std::vector<std::chrono::time_point<Clock>> parsed;
+  for (const auto& time : times) {
+    if (time.empty()) continue;
+    auto alarm = parse_alarm_time(time);
+    if (!alarm) {
+      std::cerr << "nixalarm: invalid config alarm entry: " << time << "\n";
+      parsed.clear();
+      return parsed;
+    }
+    parsed.push_back(*alarm);
+  }
+  std::sort(parsed.begin(), parsed.end());
+  return parsed;
+}
+
 static void list_sources(const Config& cfg) {
   for (const auto& [name, source] : cfg.sources) {
     std::cout << name << "\t";
@@ -785,27 +883,37 @@ int main(int argc, char** argv) {
   if (fullscreen_override) cfg.fullscreen = *fullscreen_override;
   if (do_list) { list_sources(cfg); return 0; }
 
-  std::optional<std::chrono::time_point<Clock>> alarm_time;
+  std::vector<std::chrono::time_point<Clock>> alarm_times;
+  std::optional<std::chrono::time_point<Clock>> snooze_time;
   if (test_source.empty()) {
     if (alarm_arg.empty()) {
-      if (!cfg.alarm_time.empty()) {
-        alarm_time = parse_alarm_time(cfg.alarm_time);
-        if (!alarm_time) {
-          std::cerr << "nixalarm: invalid config alarm_time, expected HH:MM, HH:MM AM/PM, or empty string\n";
+      std::vector<std::string> configured = cfg.alarms_set ? cfg.alarms : std::vector<std::string>{};
+      if (!cfg.alarms_set && !cfg.alarm_time.empty()) configured.push_back(cfg.alarm_time);
+      alarm_times = parse_alarm_times(configured);
+      if (!configured.empty() && alarm_times.empty()) {
+          std::cerr << "nixalarm: config alarms must be HH:MM, HH:MM AM/PM, or empty strings\n";
           return 2;
-        }
-      } else {
-        alarm_time.reset();
       }
     } else {
-      alarm_time = parse_alarm_time(alarm_arg);
+      auto alarm_time = parse_alarm_time(alarm_arg);
       if (!alarm_time) {
         std::cerr << "nixalarm: invalid alarm time, expected HH:MM or HH:MM AM/PM\n";
         return 2;
       }
+      alarm_times.push_back(*alarm_time);
     }
   } else {
     cfg.alarm_source = test_source;
+  }
+
+  if (test_source.empty()) {
+    if (alarm_times.empty()) {
+      std::cerr << "nixalarm: no alarms configured; running as clock only\n";
+    } else {
+      for (const auto& scheduled : alarm_times) {
+        std::cerr << "nixalarm: armed for " << format_local_time(scheduled) << "\n";
+      }
+    }
   }
 
   auto source_it = cfg.sources.find(cfg.alarm_source);
@@ -868,7 +976,8 @@ int main(int argc, char** argv) {
             ringing = false;
             hold_progress = 0.0;
             if (test_source.empty()) {
-              alarm_time = Clock::now() + std::chrono::minutes(cfg.snooze_minutes);
+              snooze_time = Clock::now() + std::chrono::minutes(cfg.snooze_minutes);
+              std::cerr << "nixalarm: snoozed until " << format_local_time(*snooze_time) << "\n";
             } else {
               running = false;
             }
@@ -878,9 +987,23 @@ int main(int argc, char** argv) {
       }
     }
 
-    if (!ringing && alarm_time && Clock::now() >= *alarm_time) {
+    auto next_alarm_due = [&]() -> bool {
+      auto now = Clock::now();
+      if (snooze_time && now >= *snooze_time) {
+        snooze_time.reset();
+        return true;
+      }
+      if (!alarm_times.empty() && now >= alarm_times.front()) {
+        alarm_times.erase(alarm_times.begin());
+        return true;
+      }
+      return false;
+    };
+
+    if (!ringing && next_alarm_due()) {
       ringing = true;
       source_it = cfg.sources.find(cfg.alarm_source);
+      std::cerr << "nixalarm: alarm triggered; source=" << cfg.alarm_source << "\n";
       audio.start(source_it->second, cfg.fallback_source, cfg.sources);
     }
 
@@ -892,8 +1015,8 @@ int main(int argc, char** argv) {
         ringing = false;
         space_down = false;
         hold_progress = 0.0;
-        if (test_source.empty()) alarm_time.reset();
-        else running = false;
+        std::cerr << "nixalarm: alarm dismissed\n";
+        if (!test_source.empty()) running = false;
       }
     }
 
