@@ -1,7 +1,7 @@
 # Maintainer: happyarch
 pkgname=nixalarm
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Small Linux alarm clock with seven-segment display and file, stream, and optional SDR audio sources'
 arch=('x86_64')
 url='https://example.invalid/nixalarm'
@@ -27,4 +27,6 @@ package() {
     "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 "$startdir/../../AGENTS.md" \
     "$pkgdir/usr/share/doc/$pkgname/AGENTS.md"
+  install -Dm644 "$startdir/nixalarm.desktop" \
+    "$pkgdir/usr/share/applications/nixalarm.desktop"
 }
