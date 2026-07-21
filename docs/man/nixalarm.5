@@ -45,19 +45,6 @@ or
 are parsed as 12-hour time. Use an empty list for clock-only no-argument
 launches.
 .TP
-.B alarm_time = "07:30"
-Backward-compatible single-alarm key used only when
-.B alarms
-is omitted. Times without
-.B AM
-or
-.B PM
-are parsed as 24-hour time. Times with
-.B AM
-or
-.B PM
-are parsed as 12-hour time.
-.TP
 .B snooze_minutes = 10
 Minutes added when Space is tapped while the alarm is ringing.
 .TP
@@ -196,7 +183,6 @@ program at runtime.
 .EX
 alarm_source = "generated"
 alarms = ["07:30", "5:30 PM"]
-alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
 volume = 0.9
