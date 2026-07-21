@@ -13,7 +13,14 @@ pkg_check_modules(AVUTIL REQUIRED IMPORTED_TARGET libavutil)
 pkg_check_modules(SWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
 pkg_check_modules(FLUIDSYNTH REQUIRED IMPORTED_TARGET fluidsynth)
 
-add_executable(nixalarm src/main.cpp)
+add_executable(nixalarm
+  src/main.cpp
+  src/config.cpp
+  src/audio.cpp
+  src/display.cpp
+  src/alarm.cpp
+)
+target_include_directories(nixalarm PRIVATE src)
 target_compile_options(nixalarm PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(nixalarm PRIVATE
   PkgConfig::SDL2
