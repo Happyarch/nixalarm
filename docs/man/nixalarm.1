@@ -1,0 +1,166 @@
+.TH NIXALARM 1 "2026-07-21" "nixalarm 0.1.0" "User Commands"
+.SH NAME
+nixalarm \- graphical Linux alarm clock with configurable audio sources
+.SH SYNOPSIS
+.B nixalarm
+.RI [ OPTIONS ]
+.I HH:MM
+.br
+.B nixalarm
+.B --test-source
+.I NAME
+.RI [ OPTIONS ]
+.br
+.B nixalarm
+.B --list-sources
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B nixalarm
+is a small Linux alarm utility. It displays the current local time in a large
+centered seven-segment clock window and rings at the next occurrence of the
+requested local
+.I HH:MM
+time.
+.PP
+The alarm can play a generated tone, local audio files, internet radio streams,
+or optional RTL-SDR weather-band audio through
+.BR rtl_fm (1).
+Local files and network streams are decoded through FFmpeg.
+.PP
+Configuration is read from
+.BR nixalarm (5).
+Command line options override matching configuration values for the current run.
+.SH OPTIONS
+.TP
+.BI --config " PATH"
+Read configuration from
+.I PATH
+instead of the XDG default.
+.TP
+.BI --source " NAME"
+Use the configured or built-in source named
+.I NAME
+as the alarm source.
+.TP
+.B --fullscreen
+Start in fullscreen desktop mode.
+.TP
+.B --windowed
+Start windowed, overriding
+.B fullscreen = true
+from the configuration file.
+.TP
+.B --list-sources
+Print built-in and configured source names, then exit.
+.TP
+.BI --test-source " NAME"
+Play source
+.I NAME
+immediately instead of scheduling an alarm.
+.TP
+.B --help
+Print command usage, then exit.
+.TP
+.B --version
+Print version, then exit.
+.SH TIME FORMAT
+.I HH:MM
+uses 24-hour local time. If the requested time has already passed today,
+.B nixalarm
+schedules the alarm for tomorrow.
+.SH CONTROLS
+.TP
+.B Space
+While ringing, tap to snooze for the configured snooze period.
+.TP
+.B Space hold
+While ringing, hold continuously for the configured stop duration to dismiss the
+alarm.
+.TP
+.B F11
+Toggle fullscreen.
+.TP
+.B f
+Toggle fullscreen.
+.TP
+.B q
+Quit.
+.TP
+.B Escape
+Quit.
+.SH BUILT-IN SOURCES
+.TP
+.B generated
+Procedural PCM alarm tone. This is the default and does not require files,
+network, or SDR hardware.
+.TP
+.B nwr_caldwell_internet_backup
+Internet-radio backup using the Linville, North Carolina WNG-538 community
+mirror when available.
+.TP
+.B nwr_nc_linville_wng538
+Alias for the Linville WNG-538 internet-radio preset.
+.TP
+.B nwr_caldwell_preferred
+Future SDR alias for the preferred Caldwell/Lenoir-area WNG-588 source at
+162.500 MHz.
+.TP
+.B nwr_nc_black_mountain_wng588
+RTL-SDR preset for NOAA Weather Radio WNG-588 in the Mount Jefferson/Black
+Mountain area at 162.500 MHz.
+.TP
+.B nwr_nc_mount_jefferson_wng588
+Alias for the same WNG-588 RTL-SDR preset.
+.TP
+.B weatherband_162_400
+.TQ
+.B weatherband_162_425
+.TQ
+.B weatherband_162_450
+.TQ
+.B weatherband_162_475
+.TQ
+.B weatherband_162_500
+.TQ
+.B weatherband_162_525
+.TQ
+.B weatherband_162_550
+Generic RTL-SDR weather-band presets.
+.SH EXAMPLES
+.TP
+Run a generated alarm at 7:30 AM:
+.EX
+nixalarm 07:30
+.EE
+.TP
+Use the Caldwell/Lenoir no-SDR internet backup:
+.EX
+nixalarm --source nwr_caldwell_internet_backup 07:30
+.EE
+.TP
+Start fullscreen with the configured default source:
+.EX
+nixalarm --fullscreen 07:30
+.EE
+.TP
+Test the generated alarm source immediately:
+.EX
+nixalarm --test-source generated
+.EE
+.SH NOTES
+Internet NOAA weather-radio URLs are community mirrors when available. Do not
+rely on this program, community internet streams, or general-purpose computer
+audio for emergency alerting.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/nixalarm/config.toml
+Primary configuration file.
+.TP
+.I $HOME/.config/nixalarm/config.toml
+Fallback configuration file when
+.B XDG_CONFIG_HOME
+is unset.
+.SH SEE ALSO
+.BR nixalarm (5),
+.BR rtl_fm (1),
+.BR ffmpeg (1)

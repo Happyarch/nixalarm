@@ -1,0 +1,177 @@
+.TH NIXALARM 5 "2026-07-21" "nixalarm 0.1.0" "File Formats"
+.SH NAME
+nixalarm \- configuration file for nixalarm
+.SH DESCRIPTION
+.B nixalarm
+reads a small TOML-like configuration file. If no file exists, built-in defaults
+are used.
+.PP
+The default path is:
+.PP
+.RS
+.I $XDG_CONFIG_HOME/nixalarm/config.toml
+.RE
+.PP
+If
+.B XDG_CONFIG_HOME
+is unset, the fallback path is:
+.PP
+.RS
+.I $HOME/.config/nixalarm/config.toml
+.RE
+.PP
+The parser supports simple
+.I key = value
+assignments, quoted strings, integers, floating point numbers, booleans, and
+sections. It is intentionally small and does not implement the full TOML
+language.
+.SH TOP-LEVEL KEYS
+.TP
+.B alarm_source = "generated"
+Default alarm source name.
+.TP
+.B snooze_minutes = 10
+Minutes added when Space is tapped while the alarm is ringing.
+.TP
+.B hold_to_stop_seconds = 10
+Seconds Space must be held continuously while ringing to dismiss the alarm.
+.TP
+.B volume = 0.9
+Playback volume from
+.B 0.0
+to
+.BR 1.0 .
+.TP
+.B source_start_timeout_seconds = 8
+FFmpeg read timeout, in seconds, for file and network sources.
+.TP
+.B fallback_source = "generated"
+Source to try when the selected source fails.
+.SH WINDOW SECTION
+.SS [window]
+.TP
+.B width = 800
+Initial window width.
+.TP
+.B height = 360
+Initial window height.
+.TP
+.B fullscreen = false
+Start in fullscreen desktop mode.
+.TP
+.B always_on_top = false
+Request an always-on-top window.
+.SH STYLE SECTION
+.SS [style]
+.TP
+.B theme = "terminal_glow"
+Apply a built-in visual theme. Set this before color overrides.
+.PP
+Supported themes:
+.RS
+.TP
+.B terminal_glow
+Dark green background, bright green digits, dim inactive segments, and glow.
+.TP
+.B sinnoh_green
+Light green pixel-clock style with dark green block digits and no glow.
+.RE
+.TP
+.B background = "#07180b"
+Window background color.
+.TP
+.B segment_on = "#6cff57"
+Active segment color.
+.TP
+.B segment_off = "#123319"
+Inactive segment color.
+.TP
+.B glow = true
+Draw a soft glow behind active segments.
+.TP
+.B show_seconds = false
+Show seconds in the clock display.
+.SH SOURCE SECTIONS
+.SS [sources.NAME]
+Each source section adds or overrides an audio source named
+.IR NAME .
+.PP
+Supported source types are
+.BR generated ,
+.BR file ,
+.BR internet ,
+and
+.BR sdr_weatherband .
+.SS Generated source
+.EX
+[sources.beep]
+type = "generated"
+.EE
+.SS Local file source
+.EX
+[sources.local_song]
+type = "file"
+path = "/home/user/Music/alarm.flac"
+.EE
+.PP
+Files are decoded through FFmpeg. Format support depends on the system FFmpeg
+build.
+.SS Internet source
+.EX
+[sources.weather_stream]
+type = "internet"
+url = "https://wxradio.org/NC-Linville-WNG538"
+.EE
+.PP
+Network streams are decoded through FFmpeg and fall back to
+.B fallback_source
+when startup or playback fails.
+.SS RTL-SDR weather-band source
+.EX
+[sources.weather_sdr]
+type = "sdr_weatherband"
+frequency_mhz = 162.500
+device_index = 0
+gain = "auto"
+.EE
+.PP
+SDR sources require RTL-SDR hardware and the
+.BR rtl_fm (1)
+program at runtime.
+.SH COMPLETE EXAMPLE
+.EX
+alarm_source = "generated"
+snooze_minutes = 10
+hold_to_stop_seconds = 10
+volume = 0.9
+source_start_timeout_seconds = 8
+fallback_source = "generated"
+
+[window]
+width = 800
+height = 360
+fullscreen = false
+always_on_top = false
+
+[style]
+theme = "sinnoh_green"
+show_seconds = false
+
+[sources.local_song]
+type = "file"
+path = "/home/user/Music/alarm.flac"
+
+[sources.weather_stream]
+type = "internet"
+url = "https://wxradio.org/NC-Linville-WNG538"
+
+[sources.black_mountain_weatherband]
+type = "sdr_weatherband"
+frequency_mhz = 162.500
+device_index = 0
+gain = "auto"
+.EE
+.SH SEE ALSO
+.BR nixalarm (1),
+.BR rtl_fm (1),
+.BR ffmpeg (1)

@@ -34,6 +34,13 @@ Run:
 ./build/nixalarm 07:30
 ```
 
+Manual pages are installed by CMake:
+
+```sh
+man nixalarm
+man 5 nixalarm
+```
+
 ## Usage
 
 ```text
