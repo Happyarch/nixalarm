@@ -23,3 +23,5 @@ target_link_libraries(nixalarm PRIVATE
 )
 
 install(TARGETS nixalarm RUNTIME DESTINATION bin)
+install(FILES docs/man/nixalarm.1 DESTINATION share/man/man1)
+install(FILES docs/man/nixalarm.5 DESTINATION share/man/man5)
