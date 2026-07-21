@@ -1,0 +1,30 @@
+# Maintainer: happyarch
+pkgname=nixalarm
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Small Linux alarm clock with seven-segment display and file, stream, and optional SDR audio sources'
+arch=('x86_64')
+url='https://example.invalid/nixalarm'
+license=('MIT')
+depends=('sdl2' 'ffmpeg' 'gcc-libs' 'glibc')
+makedepends=('cmake' 'gcc' 'pkgconf')
+optdepends=('rtl-sdr: RTL-SDR NOAA weather-band alarm sources via rtl_fm')
+source=()
+sha256sums=()
+
+build() {
+  cmake -S "$startdir/../.." -B "$srcdir/build" \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -Wno-author
+  cmake --build "$srcdir/build"
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+
+  install -Dm644 "$startdir/../../README.md" \
+    "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 "$startdir/../../AGENTS.md" \
+    "$pkgdir/usr/share/doc/$pkgname/AGENTS.md"
+}
