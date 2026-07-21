@@ -77,13 +77,13 @@ Run:
 ./build/nixalarm 07:30
 ```
 
-Run without a time to use the configured `alarm_time`:
+Run without a time to use the configured `alarms` list:
 
 ```sh
 ./build/nixalarm
 ```
 
-Set `alarm_time = ""` in the config for clock-only desktop launches.
+Set `alarms = []` in the config for clock-only desktop launches.
 
 Manual pages are installed by CMake:
 
@@ -146,8 +146,6 @@ Example:
 alarm_source = "generated"
 # Desktop/no-argument launches use alarms. Leave empty for clock-only.
 alarms = ["07:30", "5:30 PM"]
-# Backward-compatible single-alarm key. Used only when alarms is omitted.
-alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
 volume = 0.9

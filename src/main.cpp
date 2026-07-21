@@ -58,9 +58,7 @@ struct Source {
 
 struct Config {
   std::string alarm_source = "generated";
-  std::string alarm_time = "07:30";
-  std::vector<std::string> alarms;
-  bool alarms_set = false;
+  std::vector<std::string> alarms{"07:30"};
   int snooze_minutes = 10;
   int hold_to_stop_seconds = 10;
   double volume = 0.9;
@@ -186,8 +184,6 @@ static std::string default_config_text() {
       "alarm_source = \"generated\"\n"
       "# Desktop/no-argument launches use alarms. Leave empty for clock-only.\n"
       "alarms = [\"07:30\"]\n"
-      "# Backward-compatible single-alarm key. Used only when alarms is omitted.\n"
-      "alarm_time = \"07:30\"\n"
       "snooze_minutes = 10\n"
       "hold_to_stop_seconds = 10\n"
       "volume = 0.9\n"
@@ -317,10 +313,8 @@ static Config load_config(const fs::path& path) {
     try {
       if (section.empty()) {
         if (key == "alarm_source") cfg.alarm_source = unquote(val);
-        else if (key == "alarm_time") cfg.alarm_time = unquote(val);
         else if (key == "alarms") {
           cfg.alarms = parse_string_list(val);
-          cfg.alarms_set = true;
         }
         else if (key == "snooze_minutes") cfg.snooze_minutes = std::max(1, std::stoi(val));
         else if (key == "hold_to_stop_seconds") cfg.hold_to_stop_seconds = std::max(1, std::stoi(val));
@@ -709,20 +703,18 @@ static void draw_colon(SDL_Renderer* r, float x, float y, float size, const Conf
 }
 
 static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool ringing, double hold_progress) {
-  bool flash_invert = false;
+  bool flash_digits_off = false;
   if (ringing && cfg.flash_hz > 0.0) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
     double phase = std::fmod(ms / 1000.0 * cfg.flash_hz, 1.0);
-    flash_invert = phase >= 0.5;
+    flash_digits_off = phase >= 0.5;
   }
-  Color bg = flash_invert ? cfg.segment_on : cfg.background;
   Config draw_cfg = cfg;
-  if (flash_invert) {
-    draw_cfg.segment_on = cfg.background;
-    draw_cfg.segment_off = cfg.segment_on;
+  if (flash_digits_off) {
+    draw_cfg.segment_on = cfg.segment_off;
     draw_cfg.glow = false;
   }
-  set_color(r, bg);
+  set_color(r, cfg.background);
   SDL_RenderClear(r);
   auto now = Clock::to_time_t(Clock::now());
   std::tm tm{};
@@ -757,8 +749,8 @@ static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool 
     }
   }
   if (ringing) {
-    Color c = draw_cfg.segment_on;
-    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f, 8, draw_cfg.segment_off);
+    Color c = cfg.segment_on;
+    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f, 8, cfg.segment_off);
     fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f * static_cast<float>(hold_progress), 8, c);
   }
   SDL_RenderPresent(r);
@@ -887,10 +879,8 @@ int main(int argc, char** argv) {
   std::optional<std::chrono::time_point<Clock>> snooze_time;
   if (test_source.empty()) {
     if (alarm_arg.empty()) {
-      std::vector<std::string> configured = cfg.alarms_set ? cfg.alarms : std::vector<std::string>{};
-      if (!cfg.alarms_set && !cfg.alarm_time.empty()) configured.push_back(cfg.alarm_time);
-      alarm_times = parse_alarm_times(configured);
-      if (!configured.empty() && alarm_times.empty()) {
+      alarm_times = parse_alarm_times(cfg.alarms);
+      if (!cfg.alarms.empty() && alarm_times.empty()) {
           std::cerr << "nixalarm: config alarms must be HH:MM, HH:MM AM/PM, or empty strings\n";
           return 2;
       }
