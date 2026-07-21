@@ -12,6 +12,7 @@ Dependencies:
 - CMake
 - SDL2
 - FFmpeg development libraries: `libavformat`, `libavcodec`, `libavutil`, `libswresample`
+- FluidSynth development library
 - Optional for SDR weather-band wake-up, only if you have SDR hardware: `rtl_fm`
 
 Example:
@@ -76,11 +77,13 @@ Run:
 ./build/nixalarm 07:30
 ```
 
-Run without a time to use it as a clock only:
+Run without a time to use the configured `alarm_time`:
 
 ```sh
 ./build/nixalarm
 ```
+
+Set `alarm_time = ""` in the config for clock-only desktop launches.
 
 Manual pages are installed by CMake:
 
@@ -103,6 +106,14 @@ Options:
   --test-source NAME   Play a source immediately.
   --help               Print help.
   --version            Print version.
+```
+
+Times without `AM` or `PM` are parsed as 24-hour time. Times with `AM` or `PM`
+are parsed as 12-hour time:
+
+```sh
+nixalarm 19:30
+nixalarm "7:30 PM"
 ```
 
 Controls:
@@ -133,6 +144,7 @@ Example:
 
 ```toml
 alarm_source = "generated"
+alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
 volume = 0.9
@@ -157,6 +169,11 @@ show_seconds = false
 [sources.local_song]
 type = "file"
 path = "/home/user/Music/alarm.flac"
+
+[sources.midi_alarm]
+type = "midi"
+path = "/home/user/Music/alarm.mid"
+soundfont = "/usr/share/soundfonts/default.sf2"
 
 [sources.weather_stream]
 type = "internet"
@@ -215,3 +232,8 @@ Built-in themes:
 - `sinnoh_green`: light green pixel-clock style with dark green block digits, matching the provided Pokémon DS-style reference more closely.
 
 You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting a theme.
+
+## MIDI
+
+MIDI alarm sources use FluidSynth. Set `soundfont` in the source config if your
+system does not provide a common default SoundFont path.

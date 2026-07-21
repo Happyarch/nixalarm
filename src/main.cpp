@@ -1,4 +1,5 @@
 #include <SDL.h>
+#include <fluidsynth.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -23,6 +24,7 @@ extern "C" {
 #include <map>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -42,12 +44,13 @@ struct Color {
   Uint8 a = 255;
 };
 
-enum class SourceType { Generated, File, Internet, SdrWeatherband };
+enum class SourceType { Generated, File, Internet, Midi, SdrWeatherband };
 
 struct Source {
   SourceType type = SourceType::Generated;
   std::string path;
   std::string url;
+  std::string soundfont;
   double frequency_mhz = 162.45;
   int device_index = 0;
   std::string gain = "auto";
@@ -55,6 +58,7 @@ struct Source {
 
 struct Config {
   std::string alarm_source = "generated";
+  std::string alarm_time = "07:30";
   int snooze_minutes = 10;
   int hold_to_stop_seconds = 10;
   double volume = 0.9;
@@ -177,6 +181,7 @@ static std::string default_config_text() {
       "# See nixalarm(5) for the full format.\n"
       "\n"
       "alarm_source = \"generated\"\n"
+      "alarm_time = \"07:30\"\n"
       "snooze_minutes = 10\n"
       "hold_to_stop_seconds = 10\n"
       "volume = 0.9\n"
@@ -198,6 +203,12 @@ static std::string default_config_text() {
       "[sources.weather_stream]\n"
       "type = \"internet\"\n"
       "url = \"https://wxradio.org/NC-Linville-WNG538\"\n"
+      "\n"
+      "# MIDI example. Set soundfont if auto-detection does not find one.\n"
+      "# [sources.midi_alarm]\n"
+      "# type = \"midi\"\n"
+      "# path = \"/home/user/Music/alarm.mid\"\n"
+      "# soundfont = \"/usr/share/soundfonts/default.sf2\"\n"
       "\n"
       "# Future RTL-SDR WNG-588 preset, if SDR hardware is available.\n"
       "[sources.black_mountain_weatherband]\n"
@@ -259,6 +270,7 @@ static Config load_config(const fs::path& path) {
     try {
       if (section.empty()) {
         if (key == "alarm_source") cfg.alarm_source = unquote(val);
+        else if (key == "alarm_time") cfg.alarm_time = unquote(val);
         else if (key == "snooze_minutes") cfg.snooze_minutes = std::max(1, std::stoi(val));
         else if (key == "hold_to_stop_seconds") cfg.hold_to_stop_seconds = std::max(1, std::stoi(val));
         else if (key == "volume") cfg.volume = std::clamp(std::stod(val), 0.0, 1.0);
@@ -287,10 +299,12 @@ static Config load_config(const fs::path& path) {
           std::string type = unquote(val);
           if (type == "file") s.type = SourceType::File;
           else if (type == "internet") s.type = SourceType::Internet;
+          else if (type == "midi") s.type = SourceType::Midi;
           else if (type == "sdr_weatherband") s.type = SourceType::SdrWeatherband;
           else s.type = SourceType::Generated;
         } else if (key == "path") s.path = unquote(val);
         else if (key == "url") s.url = unquote(val);
+        else if (key == "soundfont") s.soundfont = unquote(val);
         else if (key == "frequency_mhz") s.frequency_mhz = std::stod(val);
         else if (key == "device_index") s.device_index = std::stoi(val);
         else if (key == "gain") s.gain = unquote(val);
@@ -332,6 +346,7 @@ class AudioPlayer {
       if (source.type == SourceType::Generated) ok = play_generated();
       else if (source.type == SourceType::File) ok = play_ffmpeg(source.path);
       else if (source.type == SourceType::Internet) ok = play_ffmpeg(source.url);
+      else if (source.type == SourceType::Midi) ok = play_midi(source);
       else if (source.type == SourceType::SdrWeatherband) ok = play_sdr(source);
       if (!ok && !stopping_) {
         auto it = all.find(fallback);
@@ -341,6 +356,7 @@ class AudioPlayer {
           if (fb.type == SourceType::Generated) play_generated();
           else if (fb.type == SourceType::File) play_ffmpeg(fb.path);
           else if (fb.type == SourceType::Internet) play_ffmpeg(fb.url);
+          else if (fb.type == SourceType::Midi) play_midi(fb);
           else if (fb.type == SourceType::SdrWeatherband) play_sdr(fb);
         } else {
           play_generated();
@@ -473,6 +489,75 @@ class AudioPlayer {
       }
       av_packet_unref(pkt.get());
     }
+    return played;
+  }
+
+  static std::string auto_soundfont() {
+    for (const char* p : {
+             "/usr/share/soundfonts/default.sf2",
+             "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+             "/usr/share/soundfonts/FluidR3_GM.sf2",
+             "/usr/share/minuet/soundfonts/GeneralUser-v1.47.sf2",
+         }) {
+      if (fs::exists(p)) return p;
+    }
+    return {};
+  }
+
+  bool play_midi(const Source& source) {
+    if (source.path.empty()) return false;
+    std::string soundfont = source.soundfont.empty() ? auto_soundfont() : source.soundfont;
+    if (soundfont.empty()) {
+      std::cerr << "nixalarm: MIDI source needs a SoundFont; set soundfont in config\n";
+      return false;
+    }
+
+    fluid_settings_t* settings = new_fluid_settings();
+    if (!settings) return false;
+    fluid_settings_setnum(settings, "synth.sample-rate", kAudioRate);
+    fluid_synth_t* synth = new_fluid_synth(settings);
+    if (!synth) {
+      delete_fluid_settings(settings);
+      return false;
+    }
+    if (fluid_synth_sfload(synth, soundfont.c_str(), 1) == FLUID_FAILED) {
+      std::cerr << "nixalarm: could not load MIDI SoundFont: " << soundfont << "\n";
+      delete_fluid_synth(synth);
+      delete_fluid_settings(settings);
+      return false;
+    }
+
+    bool played = false;
+    while (!stopping_) {
+      fluid_player_t* player = new_fluid_player(synth);
+      if (!player) break;
+      if (fluid_player_add(player, source.path.c_str()) == FLUID_FAILED || fluid_player_play(player) == FLUID_FAILED) {
+        std::cerr << "nixalarm: could not play MIDI file: " << source.path << "\n";
+        delete_fluid_player(player);
+        break;
+      }
+
+      constexpr int frames = 1024;
+      std::vector<int16_t> left(frames);
+      std::vector<int16_t> right(frames);
+      std::vector<int16_t> mono(frames);
+      while (!stopping_ && fluid_player_get_status(player) != FLUID_PLAYER_DONE) {
+        if (fluid_synth_write_s16(synth, frames, left.data(), 0, 1, right.data(), 0, 1) == FLUID_FAILED) {
+          break;
+        }
+        for (int i = 0; i < frames; ++i) {
+          double mixed = (static_cast<double>(left[i]) + static_cast<double>(right[i])) * 0.5 * volume_;
+          mono[i] = static_cast<int16_t>(std::clamp(mixed, -32768.0, 32767.0));
+        }
+        queue_bytes(reinterpret_cast<Uint8*>(mono.data()), static_cast<Uint32>(mono.size() * sizeof(int16_t)));
+        played = true;
+      }
+      fluid_player_stop(player);
+      delete_fluid_player(player);
+    }
+
+    delete_fluid_synth(synth);
+    delete_fluid_settings(settings);
     return played;
   }
 
@@ -622,10 +707,30 @@ static void usage() {
 }
 
 static std::optional<std::chrono::time_point<Clock>> parse_alarm_time(const std::string& s) {
+  static const std::regex pattern(R"(^\s*(\d{1,2}):(\d{2})\s*([AaPp]\.?[Mm]\.?)?\s*$)");
+  std::smatch match;
+  if (!std::regex_match(s, match, pattern)) return std::nullopt;
   int h = -1, m = -1;
-  char colon = 0;
-  std::istringstream iss(s);
-  if (!(iss >> h >> colon >> m) || colon != ':' || h < 0 || h > 23 || m < 0 || m > 59) return std::nullopt;
+  try {
+    h = std::stoi(match[1].str());
+    m = std::stoi(match[2].str());
+  } catch (...) {
+    return std::nullopt;
+  }
+  std::string meridiem = match[3].matched ? match[3].str() : "";
+  std::transform(meridiem.begin(), meridiem.end(), meridiem.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  meridiem.erase(std::remove(meridiem.begin(), meridiem.end(), '.'), meridiem.end());
+  if (m < 0 || m > 59) return std::nullopt;
+  if (meridiem.empty()) {
+    if (h < 0 || h > 23) return std::nullopt;
+  } else {
+    if (h < 1 || h > 12) return std::nullopt;
+    if (meridiem == "am") h = (h == 12) ? 0 : h;
+    else if (meridiem == "pm") h = (h == 12) ? 12 : h + 12;
+    else return std::nullopt;
+  }
   auto now = Clock::now();
   std::time_t tt = Clock::to_time_t(now);
   std::tm tm{};
@@ -644,6 +749,7 @@ static void list_sources(const Config& cfg) {
     if (source.type == SourceType::Generated) std::cout << "generated";
     else if (source.type == SourceType::File) std::cout << "file\t" << source.path;
     else if (source.type == SourceType::Internet) std::cout << "internet\t" << source.url;
+    else if (source.type == SourceType::Midi) std::cout << "midi\t" << source.path;
     else if (source.type == SourceType::SdrWeatherband) std::cout << "sdr_weatherband\t" << source.frequency_mhz << " MHz";
     std::cout << "\n";
   }
@@ -682,13 +788,21 @@ int main(int argc, char** argv) {
   std::optional<std::chrono::time_point<Clock>> alarm_time;
   if (test_source.empty()) {
     if (alarm_arg.empty()) {
-      alarm_time.reset();
+      if (!cfg.alarm_time.empty()) {
+        alarm_time = parse_alarm_time(cfg.alarm_time);
+        if (!alarm_time) {
+          std::cerr << "nixalarm: invalid config alarm_time, expected HH:MM, HH:MM AM/PM, or empty string\n";
+          return 2;
+        }
+      } else {
+        alarm_time.reset();
+      }
     } else {
-    alarm_time = parse_alarm_time(alarm_arg);
-    if (!alarm_time) {
-      std::cerr << "nixalarm: invalid alarm time, expected HH:MM\n";
-      return 2;
-    }
+      alarm_time = parse_alarm_time(alarm_arg);
+      if (!alarm_time) {
+        std::cerr << "nixalarm: invalid alarm time, expected HH:MM or HH:MM AM/PM\n";
+        return 2;
+      }
     }
   } else {
     cfg.alarm_source = test_source;

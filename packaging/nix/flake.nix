@@ -19,7 +19,7 @@
           src = ../..;
 
           nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config ];
-          buildInputs = [ pkgs.SDL2 pkgs.ffmpeg ];
+          buildInputs = [ pkgs.SDL2 pkgs.ffmpeg pkgs.fluidsynth ];
 
           cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
         };
@@ -33,6 +33,7 @@
             pkgs.gcc
             pkgs.SDL2
             pkgs.ffmpeg
+            pkgs.fluidsynth
           ];
         };
       });

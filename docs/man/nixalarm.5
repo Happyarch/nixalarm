@@ -30,6 +30,21 @@ language.
 .B alarm_source = "generated"
 Default alarm source name.
 .TP
+.B alarm_time = "07:30"
+Default alarm time used when
+.BR nixalarm (1)
+is launched without a command line time, such as from a desktop application
+menu. Times without
+.B AM
+or
+.B PM
+are parsed as 24-hour time. Times with
+.B AM
+or
+.B PM
+are parsed as 12-hour time. Use an empty string for clock-only no-argument
+launches.
+.TP
 .B snooze_minutes = 10
 Minutes added when Space is tapped while the alarm is ringing.
 .TP
@@ -106,6 +121,7 @@ Supported source types are
 .BR generated ,
 .BR file ,
 .BR internet ,
+.BR midi ,
 and
 .BR sdr_weatherband .
 .SS Generated source
@@ -132,6 +148,20 @@ url = "https://wxradio.org/NC-Linville-WNG538"
 Network streams are decoded through FFmpeg and fall back to
 .B fallback_source
 when startup or playback fails.
+.SS MIDI source
+.EX
+[sources.midi_alarm]
+type = "midi"
+path = "/home/user/Music/alarm.mid"
+soundfont = "/usr/share/soundfonts/default.sf2"
+.EE
+.PP
+MIDI files are rendered through FluidSynth. If
+.B soundfont
+is omitted,
+.B nixalarm
+tries a few common system SoundFont paths. If no SoundFont can be found, the
+source fails and the configured fallback source is used.
 .SS RTL-SDR weather-band source
 .EX
 [sources.weather_sdr]
@@ -147,6 +177,7 @@ program at runtime.
 .SH COMPLETE EXAMPLE
 .EX
 alarm_source = "generated"
+alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
 volume = 0.9
@@ -167,6 +198,11 @@ show_seconds = false
 [sources.local_song]
 type = "file"
 path = "/home/user/Music/alarm.flac"
+
+[sources.midi_alarm]
+type = "midi"
+path = "/home/user/Music/alarm.mid"
+soundfont = "/usr/share/soundfonts/default.sf2"
 
 [sources.weather_stream]
 type = "internet"
