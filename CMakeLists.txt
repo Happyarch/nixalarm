@@ -11,6 +11,7 @@ pkg_check_modules(AVFORMAT REQUIRED IMPORTED_TARGET libavformat)
 pkg_check_modules(AVCODEC REQUIRED IMPORTED_TARGET libavcodec)
 pkg_check_modules(AVUTIL REQUIRED IMPORTED_TARGET libavutil)
 pkg_check_modules(SWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
+pkg_check_modules(FLUIDSYNTH REQUIRED IMPORTED_TARGET fluidsynth)
 
 add_executable(nixalarm src/main.cpp)
 target_compile_options(nixalarm PRIVATE -Wall -Wextra -Wpedantic)
@@ -20,6 +21,7 @@ target_link_libraries(nixalarm PRIVATE
   PkgConfig::AVCODEC
   PkgConfig::AVUTIL
   PkgConfig::SWRESAMPLE
+  PkgConfig::FLUIDSYNTH
 )
 
 install(TARGETS nixalarm RUNTIME DESTINATION bin)
@@ -37,10 +39,10 @@ set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/Happyarch/nixalarm")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_GENERATOR "DEB;RPM")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Happyarch")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, ffmpeg")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, ffmpeg, libfluidsynth3")
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 endif()
 set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
-set(CPACK_RPM_PACKAGE_REQUIRES "SDL2, ffmpeg")
+set(CPACK_RPM_PACKAGE_REQUIRES "SDL2, ffmpeg, fluidsynth-libs")
 include(CPack)

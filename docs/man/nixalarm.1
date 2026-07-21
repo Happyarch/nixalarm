@@ -23,7 +23,7 @@ requested local
 time.
 .PP
 The alarm can play a generated tone, local audio files, internet radio streams,
-or optional RTL-SDR weather-band audio through
+MIDI files through FluidSynth, or optional RTL-SDR weather-band audio through
 .BR rtl_fm (1).
 Local files and network streams are decoded through FFmpeg.
 .PP
@@ -64,14 +64,33 @@ Print command usage, then exit.
 .B --version
 Print version, then exit.
 .SH TIME FORMAT
-.I HH:MM
-uses 24-hour local time. If the requested time has already passed today,
+Times without
+.B AM
+or
+.B PM
+use 24-hour local time. Times with
+.B AM
+or
+.B PM
+use 12-hour local time. If the requested time has already passed today,
 .B nixalarm
 schedules the alarm for tomorrow.
 .PP
+Examples:
+.EX
+nixalarm 19:30
+nixalarm "7:30 PM"
+.EE
+.PP
 If no time is provided,
 .B nixalarm
-runs as a clock only and does not schedule an alarm.
+uses the configured
+.B alarm_time
+from
+.BR nixalarm (5).
+Set
+.B alarm_time = ""
+for clock-only desktop launches.
 .PP
 The clock display uses 12-hour time by default. Set
 .B use_24_hour = true
