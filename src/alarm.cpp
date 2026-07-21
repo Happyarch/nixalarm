@@ -7,6 +7,7 @@
 #include <iostream>
 #include <regex>
 #include <sstream>
+#include <utility>
 
 std::optional<std::chrono::time_point<Clock>> parse_alarm_time(const std::string& s) {
   static const std::regex pattern(R"(^\s*(\d{1,2}):(\d{2})\s*([AaPp]\.?[Mm]\.?)?\s*$)");
@@ -68,4 +69,66 @@ std::vector<std::chrono::time_point<Clock>> parse_alarm_times(const std::vector<
   }
   std::sort(parsed.begin(), parsed.end());
   return parsed;
+}
+
+AlarmScheduler::AlarmScheduler(std::vector<std::chrono::time_point<Clock>> times, int snooze_minutes,
+                               int hold_to_stop_seconds)
+    : alarm_times_(std::move(times)),
+      snooze_duration_(std::max(1, snooze_minutes)),
+      hold_to_stop_(std::max(1, hold_to_stop_seconds)) {}
+
+bool AlarmScheduler::poll() {
+  auto now = Clock::now();
+  if (snooze_time_ && now >= *snooze_time_) {
+    snooze_time_.reset();
+    ringing_ = true;
+    return true;
+  }
+  if (!alarm_times_.empty() && now >= alarm_times_.front()) {
+    alarm_times_.erase(alarm_times_.begin());
+    ringing_ = true;
+    return true;
+  }
+  return false;
+}
+
+void AlarmScheduler::start_ringing() {
+  ringing_ = true;
+}
+
+void AlarmScheduler::press_hold() {
+  if (!ringing_) return;
+  holding_ = true;
+  hold_started_ = Clock::now();
+}
+
+AlarmScheduler::Outcome AlarmScheduler::release_hold() {
+  if (!holding_) return Outcome::None;
+  auto held = std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - hold_started_);
+  holding_ = false;
+  hold_progress_ = 0.0;
+  if (ringing_ && held < hold_to_stop_) {
+    ringing_ = false;
+    snooze_time_ = Clock::now() + snooze_duration_;
+    return Outcome::Snoozed;
+  }
+  return Outcome::None;
+}
+
+AlarmScheduler::Outcome AlarmScheduler::update_hold() {
+  if (!ringing_ || !holding_) return Outcome::None;
+  auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - hold_started_).count();
+  double full_ms = std::chrono::duration_cast<std::chrono::milliseconds>(hold_to_stop_).count();
+  hold_progress_ = std::clamp(held_ms / full_ms, 0.0, 1.0);
+  if (hold_progress_ >= 1.0) {
+    ringing_ = false;
+    holding_ = false;
+    hold_progress_ = 0.0;
+    return Outcome::Dismissed;
+  }
+  return Outcome::None;
+}
+
+bool AlarmScheduler::has_pending() const {
+  return !alarm_times_.empty() || snooze_time_.has_value();
 }

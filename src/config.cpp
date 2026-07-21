@@ -131,6 +131,8 @@ static std::string default_config_text() {
       "\n"
       "[style]\n"
       "theme = \"terminal_glow\"\n"
+      "# face selects the clock rendering style. Only seven_segment ships today.\n"
+      "# face = \"seven_segment\"\n"
       "show_seconds = false\n"
       "\n"
       "# No-SDR Caldwell/Lenoir NOAA backup.\n"
@@ -265,7 +267,8 @@ Config load_config(const fs::path& path) {
           if (!apply_theme(cfg, theme)) {
             std::cerr << "nixalarm: unknown theme: " << theme << "\n";
           }
-        } else if (key == "background") cfg.background = parse_color(val, cfg.background);
+        } else if (key == "face") cfg.clock_face = unquote(val);
+        else if (key == "background") cfg.background = parse_color(val, cfg.background);
         else if (key == "segment_on") cfg.segment_on = parse_color(val, cfg.segment_on);
         else if (key == "segment_off") cfg.segment_off = parse_color(val, cfg.segment_off);
         else if (key == "glow") cfg.glow = parse_bool(val);

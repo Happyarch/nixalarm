@@ -6,12 +6,13 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "alarm.h"
 #include "audio.h"
+#include "clock.h"
 #include "config.h"
-#include "display.h"
 #include "types.h"
 
 static void usage() {
@@ -60,7 +61,6 @@ int main(int argc, char** argv) {
   if (do_list) { list_sources(cfg); return 0; }
 
   std::vector<std::chrono::time_point<Clock>> alarm_times;
-  std::optional<std::chrono::time_point<Clock>> snooze_time;
   if (test_source.empty()) {
     if (alarm_arg.empty()) {
       alarm_times = parse_alarm_times(cfg.alarms);
@@ -121,12 +121,14 @@ int main(int argc, char** argv) {
   AudioPlayer audio(cfg.volume, cfg.source_start_timeout_seconds);
   if (!audio.open()) return 1;
 
-  bool ringing = !test_source.empty();
+  auto clock_face = make_clock_face(cfg);
+  AlarmScheduler sched(std::move(alarm_times), cfg.snooze_minutes, cfg.hold_to_stop_seconds);
+  bool is_test = !test_source.empty();
   bool running = true;
-  bool space_down = false;
-  auto space_started = Clock::now();
-  double hold_progress = 0.0;
-  if (ringing) audio.start(source_it->second, cfg.fallback_source, cfg.sources);
+  if (is_test) {
+    sched.start_ringing();
+    audio.start(source_it->second, cfg.fallback_source, cfg.sources);
+  }
 
   while (running) {
     SDL_Event e;
@@ -138,65 +140,34 @@ int main(int argc, char** argv) {
           cfg.fullscreen = !cfg.fullscreen;
           SDL_SetWindowFullscreen(win, cfg.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
         }
-        if (e.key.keysym.sym == SDLK_SPACE && ringing) {
-          space_down = true;
-          space_started = Clock::now();
-        }
-      } else if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_SPACE && ringing) {
-        if (space_down) {
-          auto held = std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - space_started).count();
-          if (held < cfg.hold_to_stop_seconds) {
-            audio.stop();
-            ringing = false;
-            hold_progress = 0.0;
-            if (test_source.empty()) {
-              snooze_time = Clock::now() + std::chrono::minutes(cfg.snooze_minutes);
-              std::cerr << "nixalarm: snoozed until " << format_local_time(*snooze_time) << "\n";
-            } else {
-              running = false;
-            }
+        if (e.key.keysym.sym == SDLK_SPACE) sched.press_hold();
+      } else if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_SPACE) {
+        if (sched.release_hold() == AlarmScheduler::Outcome::Snoozed) {
+          audio.stop();
+          if (is_test) {
+            running = false;
+          } else if (auto snooze = sched.pending_snooze()) {
+            std::cerr << "nixalarm: snoozed until " << format_local_time(*snooze) << "\n";
           }
         }
-        space_down = false;
       }
     }
 
-    auto next_alarm_due = [&]() -> bool {
-      auto now = Clock::now();
-      if (snooze_time && now >= *snooze_time) {
-        snooze_time.reset();
-        return true;
-      }
-      if (!alarm_times.empty() && now >= alarm_times.front()) {
-        alarm_times.erase(alarm_times.begin());
-        return true;
-      }
-      return false;
-    };
-
-    if (!ringing && next_alarm_due()) {
-      ringing = true;
+    if (!sched.ringing() && sched.poll()) {
       source_it = cfg.sources.find(cfg.alarm_source);
       std::cerr << "nixalarm: alarm triggered; source=" << cfg.alarm_source << "\n";
       audio.start(source_it->second, cfg.fallback_source, cfg.sources);
     }
 
-    if (ringing && space_down) {
-      auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - space_started).count();
-      hold_progress = std::clamp(held_ms / (cfg.hold_to_stop_seconds * 1000.0), 0.0, 1.0);
-      if (hold_progress >= 1.0) {
-        audio.stop();
-        ringing = false;
-        space_down = false;
-        hold_progress = 0.0;
-        std::cerr << "nixalarm: alarm dismissed\n";
-        if (!test_source.empty()) running = false;
-      }
+    if (sched.update_hold() == AlarmScheduler::Outcome::Dismissed) {
+      audio.stop();
+      std::cerr << "nixalarm: alarm dismissed\n";
+      if (is_test) running = false;
     }
 
     int ww = 0, wh = 0;
     SDL_GetWindowSize(win, &ww, &wh);
-    draw_clock(renderer, ww, wh, cfg, ringing, hold_progress);
+    clock_face->render(renderer, ww, wh, cfg, {sched.ringing(), sched.hold_progress()});
     SDL_Delay(16);
   }
 
