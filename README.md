@@ -35,8 +35,9 @@ cd packaging/arch
 makepkg -f
 ```
 
-The Arch `PKGBUILD` uses `arch=('any')`; `makepkg` accepts this and emits an
-`any` package from the local source build.
+The Arch `PKGBUILD` lists common Arch and Arch-port targets explicitly:
+`x86_64`, `aarch64`, `armv7h`, `riscv64`, and `loong64`. Release builds from
+this repository only prebuild the host architecture.
 
 AppImage build:
 
