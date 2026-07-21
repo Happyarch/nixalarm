@@ -7,6 +7,9 @@ build/
 *.exe
 *.log
 compile_commands.json
+.codex/
+.opencode/
+.claude/
 pkg/
 packaging/arch/pkg/
 packaging/arch/src/
@@ -16,3 +19,13 @@ packaging/arch/*.src.tar.gz
 *.pkg.tar.zst
 *.pkg.tar.zst.sig
 *.src.tar.gz
+AppDir/
+build-appimage/
+build-deb/
+build-rpm/
+build-flatpak/
+dist/
+_CPack_Packages/
+*.AppImage
+*.deb
+*.rpm

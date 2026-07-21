@@ -21,11 +21,52 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Generic source install:
+
+```sh
+make
+sudo make install
+```
+
 Arch package build:
 
 ```sh
 cd packaging/arch
 makepkg -f
+```
+
+The Arch `PKGBUILD` uses `arch=('any')`; `makepkg` accepts this and emits an
+`any` package from the local source build.
+
+AppImage build:
+
+```sh
+packaging/appimage/build-appimage.sh
+```
+
+Debian package build:
+
+```sh
+packaging/deb/build-deb.sh
+```
+
+Fedora/RPM package build:
+
+```sh
+packaging/rpm/build-rpm.sh
+```
+
+Flatpak bundle build:
+
+```sh
+packaging/flatpak/build-flatpak.sh
+```
+
+Nix packaging example:
+
+```sh
+cd packaging/nix
+nix build
 ```
 
 Run:

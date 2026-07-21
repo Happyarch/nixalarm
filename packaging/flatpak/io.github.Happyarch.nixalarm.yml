@@ -1,0 +1,22 @@
+app-id: io.github.Happyarch.nixalarm
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: nixalarm
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --share=network
+  - --filesystem=xdg-config/nixalarm:create
+modules:
+  - name: nixalarm
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+    sources:
+      - type: dir
+        path: ../..
+    post-install:
+      - install -Dm644 packaging/flatpak/io.github.Happyarch.nixalarm.desktop /app/share/applications/io.github.Happyarch.nixalarm.desktop
