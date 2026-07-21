@@ -30,8 +30,8 @@ language.
 .B alarm_source = "generated"
 Default alarm source name.
 .TP
-.B alarm_time = "07:30"
-Default alarm time used when
+.B alarms = ["07:30"]
+List of default alarm times used when
 .BR nixalarm (1)
 is launched without a command line time, such as from a desktop application
 menu. Times without
@@ -42,8 +42,21 @@ are parsed as 24-hour time. Times with
 .B AM
 or
 .B PM
-are parsed as 12-hour time. Use an empty string for clock-only no-argument
+are parsed as 12-hour time. Use an empty list for clock-only no-argument
 launches.
+.TP
+.B alarm_time = "07:30"
+Backward-compatible single-alarm key used only when
+.B alarms
+is omitted. Times without
+.B AM
+or
+.B PM
+are parsed as 24-hour time. Times with
+.B AM
+or
+.B PM
+are parsed as 12-hour time.
 .TP
 .B snooze_minutes = 10
 Minutes added when Space is tapped while the alarm is ringing.
@@ -82,6 +95,11 @@ Start in fullscreen desktop mode.
 .TP
 .B always_on_top = false
 Request an always-on-top window.
+.TP
+.B flash_hz = 2.0
+Flash rate, in hertz, while the alarm is ringing. Set to
+.B 0
+to disable flashing.
 .SH STYLE SECTION
 .SS [style]
 .TP
@@ -177,6 +195,7 @@ program at runtime.
 .SH COMPLETE EXAMPLE
 .EX
 alarm_source = "generated"
+alarms = ["07:30", "5:30 PM"]
 alarm_time = "07:30"
 snooze_minutes = 10
 hold_to_stop_seconds = 10
@@ -190,6 +209,7 @@ width = 800
 height = 360
 fullscreen = false
 always_on_top = false
+flash_hz = 2.0
 
 [style]
 theme = "sinnoh_green"
