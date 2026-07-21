@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=nixalarm
+GenericName=Alarm Clock
+Comment=Seven-segment Linux alarm clock
+Exec=nixalarm
+Terminal=false
+Categories=Utility;Clock;
+Keywords=alarm;clock;timer;weather;NOAA;

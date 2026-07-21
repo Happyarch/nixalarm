@@ -4,7 +4,7 @@ nixalarm \- graphical Linux alarm clock with configurable audio sources
 .SH SYNOPSIS
 .B nixalarm
 .RI [ OPTIONS ]
-.I HH:MM
+.RI [ HH:MM ]
 .br
 .B nixalarm
 .B --test-source
@@ -68,6 +68,16 @@ Print version, then exit.
 uses 24-hour local time. If the requested time has already passed today,
 .B nixalarm
 schedules the alarm for tomorrow.
+.PP
+If no time is provided,
+.B nixalarm
+runs as a clock only and does not schedule an alarm.
+.PP
+The clock display uses 12-hour time by default. Set
+.B use_24_hour = true
+in
+.BR nixalarm (5)
+to display 24-hour time.
 .SH CONTROLS
 .TP
 .B Space

@@ -4,7 +4,7 @@ nixalarm \- configuration file for nixalarm
 .SH DESCRIPTION
 .B nixalarm
 reads a small TOML-like configuration file. If no file exists, built-in defaults
-are used.
+are written to disk and then loaded.
 .PP
 The default path is:
 .PP
@@ -47,6 +47,12 @@ FFmpeg read timeout, in seconds, for file and network sources.
 .TP
 .B fallback_source = "generated"
 Source to try when the selected source fails.
+.TP
+.B use_24_hour = false
+Use a 24-hour clock display. The default
+.B false
+uses 12-hour display. Alarm times on the command line still use 24-hour
+.IR HH:MM .
 .SH WINDOW SECTION
 .SS [window]
 .TP
@@ -146,6 +152,7 @@ hold_to_stop_seconds = 10
 volume = 0.9
 source_start_timeout_seconds = 8
 fallback_source = "generated"
+use_24_hour = false
 
 [window]
 width = 800

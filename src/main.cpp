@@ -60,6 +60,7 @@ struct Config {
   double volume = 0.9;
   int source_start_timeout_seconds = 8;
   std::string fallback_source = "generated";
+  bool use_24_hour = false;
   int width = 800;
   int height = 360;
   bool fullscreen = false;
@@ -170,9 +171,63 @@ static fs::path default_config_path() {
   return "config.toml";
 }
 
+static std::string default_config_text() {
+  return
+      "# nixalarm config\n"
+      "# See nixalarm(5) for the full format.\n"
+      "\n"
+      "alarm_source = \"generated\"\n"
+      "snooze_minutes = 10\n"
+      "hold_to_stop_seconds = 10\n"
+      "volume = 0.9\n"
+      "source_start_timeout_seconds = 8\n"
+      "fallback_source = \"generated\"\n"
+      "use_24_hour = false\n"
+      "\n"
+      "[window]\n"
+      "width = 800\n"
+      "height = 360\n"
+      "fullscreen = false\n"
+      "always_on_top = false\n"
+      "\n"
+      "[style]\n"
+      "theme = \"terminal_glow\"\n"
+      "show_seconds = false\n"
+      "\n"
+      "# No-SDR Caldwell/Lenoir NOAA backup.\n"
+      "[sources.weather_stream]\n"
+      "type = \"internet\"\n"
+      "url = \"https://wxradio.org/NC-Linville-WNG538\"\n"
+      "\n"
+      "# Future RTL-SDR WNG-588 preset, if SDR hardware is available.\n"
+      "[sources.black_mountain_weatherband]\n"
+      "type = \"sdr_weatherband\"\n"
+      "frequency_mhz = 162.500\n"
+      "device_index = 0\n"
+      "gain = \"auto\"\n";
+}
+
+static void seed_default_config_if_missing(const fs::path& path) {
+  if (path.empty() || fs::exists(path)) return;
+  std::error_code ec;
+  if (path.has_parent_path()) fs::create_directories(path.parent_path(), ec);
+  if (ec) {
+    std::cerr << "nixalarm: could not create config directory " << path.parent_path() << ": " << ec.message() << "\n";
+    return;
+  }
+  std::ofstream out(path);
+  if (!out) {
+    std::cerr << "nixalarm: could not create default config: " << path << "\n";
+    return;
+  }
+  out << default_config_text();
+  std::cerr << "nixalarm: created default config: " << path << "\n";
+}
+
 static Config load_config(const fs::path& path) {
   Config cfg;
   cfg.sources = builtin_sources();
+  seed_default_config_if_missing(path);
   std::ifstream in(path);
   if (!in) return cfg;
 
@@ -209,6 +264,7 @@ static Config load_config(const fs::path& path) {
         else if (key == "volume") cfg.volume = std::clamp(std::stod(val), 0.0, 1.0);
         else if (key == "source_start_timeout_seconds") cfg.source_start_timeout_seconds = std::max(1, std::stoi(val));
         else if (key == "fallback_source") cfg.fallback_source = unquote(val);
+        else if (key == "use_24_hour") cfg.use_24_hour = parse_bool(val);
       } else if (section == "window") {
         if (key == "width") cfg.width = std::max(240, std::stoi(val));
         else if (key == "height") cfg.height = std::max(160, std::stoi(val));
@@ -514,7 +570,12 @@ static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool 
   std::tm tm{};
   localtime_r(&now, &tm);
   std::ostringstream ss;
-  ss << std::setfill('0') << std::setw(2) << tm.tm_hour << ":" << std::setw(2) << tm.tm_min;
+  int display_hour = tm.tm_hour;
+  if (!cfg.use_24_hour) {
+    display_hour %= 12;
+    if (display_hour == 0) display_hour = 12;
+  }
+  ss << std::setfill('0') << std::setw(2) << display_hour << ":" << std::setw(2) << tm.tm_min;
   if (cfg.show_seconds) ss << ":" << std::setw(2) << tm.tm_sec;
   std::string text = ss.str();
 
@@ -548,7 +609,7 @@ static void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool 
 static void usage() {
   std::cout <<
       "nixalarm 0.1.0\n"
-      "Usage: nixalarm [OPTIONS] HH:MM\n\n"
+      "Usage: nixalarm [OPTIONS] [HH:MM]\n\n"
       "Options:\n"
       "  --config PATH        Read config from PATH instead of XDG config.\n"
       "  --source NAME        Use a configured or built-in source.\n"
@@ -620,11 +681,14 @@ int main(int argc, char** argv) {
 
   std::optional<std::chrono::time_point<Clock>> alarm_time;
   if (test_source.empty()) {
-    if (alarm_arg.empty()) { usage(); return 2; }
+    if (alarm_arg.empty()) {
+      alarm_time.reset();
+    } else {
     alarm_time = parse_alarm_time(alarm_arg);
     if (!alarm_time) {
       std::cerr << "nixalarm: invalid alarm time, expected HH:MM\n";
       return 2;
+    }
     }
   } else {
     cfg.alarm_source = test_source;

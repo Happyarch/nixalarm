@@ -34,6 +34,12 @@ Run:
 ./build/nixalarm 07:30
 ```
 
+Run without a time to use it as a clock only:
+
+```sh
+./build/nixalarm
+```
+
 Manual pages are installed by CMake:
 
 ```sh
@@ -44,7 +50,7 @@ man 5 nixalarm
 ## Usage
 
 ```text
-nixalarm [OPTIONS] HH:MM
+nixalarm [OPTIONS] [HH:MM]
 
 Options:
   --config PATH        Read config from PATH instead of XDG config.
@@ -78,6 +84,9 @@ Fallback:
 $HOME/.config/nixalarm/config.toml
 ```
 
+If the selected config file does not exist, `nixalarm` creates it with default
+settings before loading it.
+
 Example:
 
 ```toml
@@ -87,6 +96,7 @@ hold_to_stop_seconds = 10
 volume = 0.9
 source_start_timeout_seconds = 8
 fallback_source = "generated"
+use_24_hour = false
 
 [window]
 width = 800
