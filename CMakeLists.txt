@@ -17,7 +17,7 @@ add_executable(nixalarm
   src/main.cpp
   src/config.cpp
   src/audio.cpp
-  src/display.cpp
+  src/clock.cpp
   src/alarm.cpp
 )
 target_include_directories(nixalarm PRIVATE src)

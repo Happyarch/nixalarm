@@ -47,6 +47,7 @@ struct Config {
   bool always_on_top = false;
   double flash_hz = 2.0;
   std::string theme = "terminal_glow";
+  std::string clock_face = "seven_segment";
   Color background{7, 24, 11, 255};
   Color segment_on{108, 255, 87, 255};
   Color segment_off{18, 51, 25, 255};

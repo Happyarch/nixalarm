@@ -1,14 +1,32 @@
-#include "display.h"
+#include "clock.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <ctime>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 
-static const bool kSegments[10][7] = {
+namespace {
+
+// Seven-segment clock: the original nixalarm look. Colors and glow come from
+// Config (the theme), so this class holds no per-frame state of its own.
+class SevenSegmentClock : public ClockFace {
+ public:
+  void render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
+
+ private:
+  static const bool kSegments[10][7];
+
+  static void set_color(SDL_Renderer* r, Color c, Uint8 alpha = 255);
+  static void fill_rect(SDL_Renderer* r, float x, float y, float w, float h, Color c, Uint8 alpha = 255);
+  static void draw_digit(SDL_Renderer* r, int digit, float x, float y, float w, float h, const Config& cfg);
+  static void draw_colon(SDL_Renderer* r, float x, float y, float size, const Config& cfg);
+};
+
+const bool SevenSegmentClock::kSegments[10][7] = {
     {true, true, true, true, true, true, false},
     {false, true, true, false, false, false, false},
     {true, true, false, true, true, false, true},
@@ -21,17 +39,17 @@ static const bool kSegments[10][7] = {
     {true, true, true, true, false, true, true},
 };
 
-static void set_color(SDL_Renderer* r, Color c, Uint8 alpha = 255) {
+void SevenSegmentClock::set_color(SDL_Renderer* r, Color c, Uint8 alpha) {
   SDL_SetRenderDrawColor(r, c.r, c.g, c.b, alpha);
 }
 
-static void fill_rect(SDL_Renderer* r, float x, float y, float w, float h, Color c, Uint8 alpha = 255) {
+void SevenSegmentClock::fill_rect(SDL_Renderer* r, float x, float y, float w, float h, Color c, Uint8 alpha) {
   set_color(r, c, alpha);
   SDL_FRect rect{x, y, w, h};
   SDL_RenderFillRectF(r, &rect);
 }
 
-static void draw_digit(SDL_Renderer* r, int digit, float x, float y, float w, float h, const Config& cfg) {
+void SevenSegmentClock::draw_digit(SDL_Renderer* r, int digit, float x, float y, float w, float h, const Config& cfg) {
   float t = std::max(5.0f, w * 0.14f);
   float gap = t * 0.45f;
   struct Seg { float x, y, w, h; };
@@ -51,15 +69,15 @@ static void draw_digit(SDL_Renderer* r, int digit, float x, float y, float w, fl
   }
 }
 
-static void draw_colon(SDL_Renderer* r, float x, float y, float size, const Config& cfg) {
+void SevenSegmentClock::draw_colon(SDL_Renderer* r, float x, float y, float size, const Config& cfg) {
   float d = size * 0.12f;
   fill_rect(r, x, y + size * 0.32f, d, d, cfg.segment_on);
   fill_rect(r, x, y + size * 0.62f, d, d, cfg.segment_on);
 }
 
-void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool ringing, double hold_progress) {
+void SevenSegmentClock::render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) {
   bool flash_digits_off = false;
-  if (ringing && cfg.flash_hz > 0.0) {
+  if (ring.ringing && cfg.flash_hz > 0.0) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
     double phase = std::fmod(ms / 1000.0 * cfg.flash_hz, 1.0);
     flash_digits_off = phase >= 0.5;
@@ -103,10 +121,20 @@ void draw_clock(SDL_Renderer* r, int ww, int wh, const Config& cfg, bool ringing
       x += colon_w + digit_w * 0.12f;
     }
   }
-  if (ringing) {
+  if (ring.ringing) {
     Color c = cfg.segment_on;
     fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f, 8, cfg.segment_off);
-    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f * static_cast<float>(hold_progress), 8, c);
+    fill_rect(r, ww * 0.08f, wh * 0.90f, ww * 0.84f * static_cast<float>(ring.hold_progress), 8, c);
   }
   SDL_RenderPresent(r);
+}
+
+}  // namespace
+
+std::unique_ptr<ClockFace> make_clock_face(const Config& cfg) {
+  if (cfg.clock_face == "seven_segment") {
+    return std::make_unique<SevenSegmentClock>();
+  }
+  std::cerr << "nixalarm: unknown clock face: " << cfg.clock_face << "; using seven_segment\n";
+  return std::make_unique<SevenSegmentClock>();
 }
