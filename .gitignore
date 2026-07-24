@@ -29,3 +29,12 @@ _CPack_Packages/
 *.AppImage
 *.deb
 *.rpm
+
+# nixie asset pipeline: assets/base/ (masters + masks) and the generator
+# scripts are source; assets/derived/ and non-shipped runtime staging dirs
+# are regenerable build output (see assets/stage_assets.py). assets/runtime/nixie/
+# IS tracked -- CMakeLists.txt installs it directly, no build step produces it.
+__pycache__/
+assets/derived/
+assets/runtime/nixie-*/
+assets/base/nixie-clock/*-DO-NOT-USE.png

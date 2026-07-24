@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(GNUInstallDirs)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(AVFORMAT REQUIRED IMPORTED_TARGET libavformat)
@@ -18,10 +20,14 @@ add_executable(nixalarm
   src/config.cpp
   src/audio.cpp
   src/clock.cpp
+  src/nixie.cpp
+  src/stb_image_impl.cpp
   src/alarm.cpp
 )
-target_include_directories(nixalarm PRIVATE src)
+target_include_directories(nixalarm PRIVATE src third_party)
 target_compile_options(nixalarm PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(nixalarm PRIVATE
+  NIXALARM_DATADIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/nixalarm")
 target_link_libraries(nixalarm PRIVATE
   PkgConfig::SDL2
   PkgConfig::AVFORMAT
@@ -32,6 +38,9 @@ target_link_libraries(nixalarm PRIVATE
 )
 
 install(TARGETS nixalarm RUNTIME DESTINATION bin)
+install(DIRECTORY assets/runtime/nixie
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/nixalarm
+        FILES_MATCHING PATTERN "*.png" PATTERN "*.json")
 install(FILES docs/man/nixalarm.1 DESTINATION share/man/man1)
 install(FILES docs/man/nixalarm.5 DESTINATION share/man/man5)
 install(FILES data/nixalarm.desktop DESTINATION share/applications)

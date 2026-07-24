@@ -91,29 +91,43 @@ to disable flashing.
 .SS [style]
 .TP
 .B theme = "terminal_glow"
-Apply a built-in visual theme. Set this before color overrides.
+Select the built-in visual theme. A theme sets both the clock rendering style
+and its colors. Set this before any color overrides.
 .PP
 Supported themes:
 .RS
 .TP
 .B terminal_glow
-Dark green background, bright green digits, dim inactive segments, and glow.
+Seven-segment digits. Dark green background, bright green digits, dim
+inactive segments, and glow.
 .TP
 .B sinnoh_green
-Light green pixel-clock style with dark green block digits and no glow.
+Seven-segment digits. Light green pixel-clock style with dark green block
+digits and no glow.
+.TP
+.B nixie
+Photoreal nixie-tube digits. Does not use the color overrides below.
 .RE
 .TP
 .B background = "#07180b"
-Window background color.
+Window background color. Ignored by the
+.B nixie
+theme.
 .TP
 .B segment_on = "#6cff57"
-Active segment color.
+Active segment color. Ignored by the
+.B nixie
+theme.
 .TP
 .B segment_off = "#123319"
-Inactive segment color.
+Inactive segment color. Ignored by the
+.B nixie
+theme.
 .TP
 .B glow = true
-Draw a soft glow behind active segments.
+Draw a soft glow behind active segments. Ignored by the
+.B nixie
+theme.
 .TP
 .B show_seconds = false
 Show seconds in the clock display.

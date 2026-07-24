@@ -1,5 +1,7 @@
 #include "clock.h"
 
+#include "nixie.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -134,6 +136,9 @@ void SevenSegmentClock::render(SDL_Renderer* r, int ww, int wh, const Config& cf
 std::unique_ptr<ClockFace> make_clock_face(const Config& cfg) {
   if (cfg.clock_face == "seven_segment") {
     return std::make_unique<SevenSegmentClock>();
+  }
+  if (cfg.clock_face == "nixie") {
+    return make_nixie_clock();
   }
   std::cerr << "nixalarm: unknown clock face: " << cfg.clock_face << "; using seven_segment\n";
   return std::make_unique<SevenSegmentClock>();
