@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "dial_engrave.h"
 #include "gl_util.h"
 #include "procedural_texture.h"
 #include "stb_image.h"
@@ -94,6 +95,12 @@ uniform sampler2D uGroundParams;
 uniform sampler2D uGnomonDiffuse;
 uniform sampler2D uGnomonNormal;
 uniform sampler2D uGnomonParams;
+// The engraved Roman hour numerals: a depth field covering the plate disc
+// exactly once (src/dial_engrave.h), NOT a tiling material map -- 0 is the
+// uncut surface, 1 the bottom of a stroke. It is applied as bump only, by
+// bending the plate normal along its gradient, so the numerals catch raking
+// light and fill with shadow instead of reading as painted-on decals.
+uniform sampler2D uPlateEngrave;
 uniform int uPlateMapped;
 uniform int uGroundMapped;
 uniform int uGnomonMapped;
@@ -103,6 +110,10 @@ uniform vec2 uGnomonUvScale;  // (around-circumference, along-axis) repeats
 
 const float kInf = 1e9;
 const float kEps = 3e-4;
+// How hard the numeral engraving bends the plate normal. The gradient it
+// scales is a difference between neighboring texels, so this absorbs the
+// texel size as well as the cut depth; tune it by eye, not by arithmetic.
+const float kEngraveBump = 14.0;
 
 // Capsule (sphere-capped segment a-b, radius r). Returns entry t or -1.
 float capsuleIntersect(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float r, out vec3 n) {
@@ -322,6 +333,22 @@ void main() {
       vec3 tex = texture(uPlateDiffuse, uv).rgb;
       albedo = (uPlateMapped == 1) ? tex : uPlateColor * tex;
       n = perturbNormal(uPlateNormal, n, uv);
+      // Cut the numerals into the top face only -- the rim and underside of
+      // the slab share this primitive but carry no lettering.
+      if (n.z > 0.5) {
+        vec2 euv = p.xy / (2.0 * uPlateRadius) + 0.5;
+        vec2 ts = 1.0 / vec2(textureSize(uPlateEngrave, 0));
+        float e = texture(uPlateEngrave, euv).r;
+        // Central differences give the groove's slope; the surface is
+        // z = -depth, so its normal tilts along +gradient.
+        float ex = texture(uPlateEngrave, euv + vec2(ts.x, 0.0)).r - texture(uPlateEngrave, euv - vec2(ts.x, 0.0)).r;
+        float ey = texture(uPlateEngrave, euv + vec2(0.0, ts.y)).r - texture(uPlateEngrave, euv - vec2(0.0, ts.y)).r;
+        n = normalize(n + vec3(ex, ey, 0.0) * kEngraveBump);
+        // A cut in stone is darker and less exposed to the sky than the face
+        // around it: fresh-broken texture plus self-occlusion in the groove.
+        albedo *= mix(1.0, 0.62, e);
+        prm.g *= mix(1.0, 0.55, e);
+      }
     } else if (kind == 2) {
       // The solid rod is rods[0] by dial_scene contract: cylindrical UVs
       // around its axis (u = angle, v = distance along), so the metal maps
@@ -381,12 +408,23 @@ void main() {
 }
 )GLSL";
 
-// The projection half-extent, sized so a unit-radius plate plus its gnomon
-// comfortably fits regardless of window aspect (same value the old
-// rasterizer used, so the framing is unchanged).
-constexpr float kHalfExtent = 1.9f;
+// The projection half-extents -- with an orthographic camera these ARE the
+// zoom, since sliding the eye along its own view direction changes nothing.
+//
+// This is the dial's own projected bounding box under the fixed camera rig
+// (the tilted plate reads much wider than it is tall), with a small margin.
+// The framing fits this box to whichever window axis runs out first, so the
+// app's default wide-and-short window zooms in to fill its height instead of
+// padding both sides with grass. The engraved numerals sit at 0.885 of the
+// plate radius and have to stay legible, which is what set the margin.
+constexpr float kContentHalfWidth = 1.25f;
+constexpr float kContentHalfHeight = 0.85f;
 
 constexpr int kSurfaceMapSize = 256;
+// The engraving covers the plate disc once, so its resolution is the whole
+// budget for the numerals' edges -- unlike the tiling material maps, it can't
+// be repeated to gain detail.
+constexpr int kEngravingMapSize = 1024;
 constexpr float kPlateUvScale = 0.85f;
 constexpr float kGroundUvScale = 0.35f;
 
@@ -583,6 +621,13 @@ void DialGlRenderer::ensure_initialized(SDL_Window* win, const DialScene& scene,
   // square texture ~5x along the axis to keep texels roughly isotropic.
   glUniform2f(glGetUniformLocation(program_, "uGnomonUvScale"), 1.0f, 5.0f);
 
+  // The engraved hour numerals. Generated from the scene rather than loaded,
+  // because where they land depends on the orientation the optimizer picked
+  // for this latitude, so no shippable bitmap could be correct everywhere.
+  EngravingMap engraving = build_hour_numeral_engraving(scene, kEngravingMapSize);
+  texture_plate_engrave_ = glutil::upload_texture_r8_clamped(engraving.depth.data(), engraving.size, engraving.size);
+  glUniform1i(glGetUniformLocation(program_, "uPlateEngrave"), 9);
+
   // The tracer composites glass in-shader, but blending stays enabled for
   // any rasterized overlay a future pass might draw on top of the traced
   // frame.
@@ -607,8 +652,14 @@ void DialGlRenderer::render(SDL_Window* win, int ww, int wh, const DialScene& sc
   Vec3 right = normalize(cross(forward, camera.up_hint_in_plate_frame));
   Vec3 up = cross(right, forward);
   float aspect = wh > 0 ? static_cast<float>(ww) / static_cast<float>(wh) : 1.0f;
-  float half_w = aspect >= 1.0f ? kHalfExtent * aspect : kHalfExtent;
-  float half_h = aspect >= 1.0f ? kHalfExtent : kHalfExtent / aspect;
+  float half_w, half_h;
+  if (kContentHalfWidth / kContentHalfHeight > aspect) {
+    half_w = kContentHalfWidth;  // narrower window than the dial: width binds
+    half_h = kContentHalfWidth / aspect;
+  } else {
+    half_h = kContentHalfHeight;  // wider window: height binds, so zoom in
+    half_w = kContentHalfHeight * aspect;
+  }
 
   glUseProgram(program_);
   auto set3 = [](int loc, Vec3 v) {
@@ -640,6 +691,8 @@ void DialGlRenderer::render(SDL_Window* win, int ww, int wh, const DialScene& sc
   glBindTexture(GL_TEXTURE_2D, texture_ground_normal_);
   glActiveTexture(GL_TEXTURE8);
   glBindTexture(GL_TEXTURE_2D, texture_ground_params_);
+  glActiveTexture(GL_TEXTURE9);
+  glBindTexture(GL_TEXTURE_2D, texture_plate_engrave_);
 
   glBindVertexArray(trace_vao_);
   glDrawArrays(GL_TRIANGLES, 0, 3);

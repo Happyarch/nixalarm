@@ -35,4 +35,9 @@ unsigned upload_texture_rgb8(const std::vector<uint8_t>& pixels, int size);
 // G=ambient occlusion, B=height, A=metallic).
 unsigned upload_texture_rgba8(const uint8_t* pixels, int width, int height);
 
+// Single-channel, and CLAMPED rather than repeating -- for maps that cover a
+// bounded piece of geometry exactly once (the dial's numeral engraving covers
+// the plate disc), where wrapping would tile the content back over itself.
+unsigned upload_texture_r8_clamped(const uint8_t* pixels, int width, int height);
+
 }  // namespace glutil

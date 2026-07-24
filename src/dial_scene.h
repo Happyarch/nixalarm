@@ -43,11 +43,27 @@ struct SceneRod {
   DialMaterial material = DialMaterial::Gnomon;
 };
 
+// One hour line's label: which numeral to letter onto the plate, and where.
+// Emitted alongside the tick rods and in the same order, so a mark always has
+// a tick -- an hour whose shadow falls off the plate gets neither.
+//
+// This is geometry, not rendering: the numerals are ENGRAVED, cut into the
+// plate as a height field (src/dial_engrave.h) that the tracer reads as bump,
+// so they catch the same raking light the rest of the stone does instead of
+// sitting on top of it as decals.
+struct HourMark {
+  Vec2 direction;   // unit, on the plate, from the dial center toward the mark
+  double radius;    // distance from the center to the numeral's center
+  double height;    // cap height of the numeral, in plate units
+  int hour = 12;    // 1..12; the numeral to cut
+};
+
 struct DialScene {
   double plate_radius = 0.0;
   double plate_thickness = 0.0;  // plate occupies local z in [-thickness, 0]
   double ground_z = 0.0;         // local z of the infinite ground plane (< -thickness)
   std::vector<SceneRod> rods;
+  std::vector<HourMark> hour_marks;
   Vec3 gnomon_tip_local;  // the nodus; end of the solid rod
 };
 

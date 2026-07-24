@@ -85,6 +85,11 @@ class DialGlRenderer {
   unsigned texture_plate_diffuse_ = 0, texture_plate_normal_ = 0, texture_plate_params_ = 0;
   unsigned texture_ground_diffuse_ = 0, texture_ground_normal_ = 0, texture_ground_params_ = 0;
   unsigned texture_gnomon_diffuse_ = 0, texture_gnomon_normal_ = 0, texture_gnomon_params_ = 0;
+  // The engraved Roman hour numerals (src/dial_engrave.h). Generated from the
+  // scene at startup rather than loaded: which numerals land where depends on
+  // the orientation the optimizer chose for the configured latitude, so this
+  // one can't ship as a bitmap. Unit 9, clamped, single channel.
+  unsigned texture_plate_engrave_ = 0;
   int uniform_eye_ = -1, uniform_right_ = -1, uniform_up_ = -1, uniform_forward_ = -1;
   int uniform_half_extent_ = -1;
   int uniform_light_dir_ = -1;

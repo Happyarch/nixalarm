@@ -21,6 +21,7 @@ add_library(dial_math STATIC
   src/astro.cpp
   src/dial_geometry.cpp
   src/dial_scene.cpp
+  src/dial_engrave.cpp
 )
 target_include_directories(dial_math PUBLIC src third_party)
 target_compile_options(dial_math PRIVATE -Wall -Wextra -Wpedantic)
@@ -87,6 +88,10 @@ add_test(NAME dial_geometry_tests COMMAND nixalarm_dial_tests)
 add_executable(nixalarm_dial_scene_tests tests/test_dial_scene.cpp)
 target_link_libraries(nixalarm_dial_scene_tests PRIVATE dial_math)
 add_test(NAME dial_scene_tests COMMAND nixalarm_dial_scene_tests)
+
+add_executable(nixalarm_dial_engrave_tests tests/test_dial_engrave.cpp)
+target_link_libraries(nixalarm_dial_engrave_tests PRIVATE dial_math)
+add_test(NAME dial_engrave_tests COMMAND nixalarm_dial_engrave_tests)
 
 add_executable(nixalarm_analog_tests tests/test_analog.cpp)
 target_link_libraries(nixalarm_analog_tests PRIVATE analog_clock)

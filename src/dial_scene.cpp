@@ -8,7 +8,11 @@ constexpr double kGnomonRodRadiusRatio = 0.035;  // relative to gnomon_length
 constexpr double kGlassLegRadiusRatio = 0.012;   // relative to gnomon_length; ~1/3 of the rod
 constexpr double kTickRodRadiusRatio = 0.010;    // relative to plate_radius
 constexpr double kTickInnerRadiusRatio = 0.22;
-constexpr double kTickOuterRadiusRatio = 0.95;
+// The hour lines stop short of the rim to leave an annulus for the engraved
+// numerals, which sit centered in the gap between the tick ends and the edge.
+constexpr double kTickOuterRadiusRatio = 0.80;
+constexpr double kNumeralRadiusRatio = 0.885;
+constexpr double kNumeralHeightRatio = 0.105;
 constexpr double kPlateThicknessRatio = 0.05;  // relative to plate_radius
 constexpr double kGroundGapRatio = 0.02;       // gap between plate underside and ground
 
@@ -68,6 +72,13 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
     // as a raised ridge the tracer can shade and shadow like everything else.
     scene.rods.push_back(SceneRod{Vec3{dir.x * r_inner, dir.y * r_inner, 0.0},
                                    Vec3{dir.x * r_outer, dir.y * r_outer, 0.0}, tick_r, DialMaterial::Tick});
+
+    // h is the hour angle from the dial's own noon (midnight for a moondial),
+    // 15 degrees per hour, so the clock hour is 12 + h/15 -- folded onto the
+    // 1..12 a Roman numeral can express.
+    int hour24 = 12 + static_cast<int>(std::lround(h / 15.0));
+    scene.hour_marks.push_back(HourMark{dir, plate_radius * kNumeralRadiusRatio,
+                                         plate_radius * kNumeralHeightRatio, ((hour24 + 11) % 12) + 1});
   }
 
   return scene;

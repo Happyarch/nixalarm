@@ -99,15 +99,16 @@ unsigned upload_texture_rgb8(const std::vector<uint8_t>& pixels, int size) {
 
 namespace {
 
-unsigned upload_texture(const uint8_t* pixels, int width, int height, GLint internal_format, GLenum format) {
+unsigned upload_texture(const uint8_t* pixels, int width, int height, GLint internal_format, GLenum format,
+                        GLint wrap) {
   unsigned tex = 0;
   glGenTextures(1, &tex);
   glBindTexture(GL_TEXTURE_2D, tex);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, GL_UNSIGNED_BYTE, pixels);
   glGenerateMipmap(GL_TEXTURE_2D);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   return tex;
@@ -116,11 +117,15 @@ unsigned upload_texture(const uint8_t* pixels, int width, int height, GLint inte
 }  // namespace
 
 unsigned upload_texture_rgb8(const uint8_t* pixels, int width, int height) {
-  return upload_texture(pixels, width, height, GL_RGB8, GL_RGB);
+  return upload_texture(pixels, width, height, GL_RGB8, GL_RGB, GL_REPEAT);
 }
 
 unsigned upload_texture_rgba8(const uint8_t* pixels, int width, int height) {
-  return upload_texture(pixels, width, height, GL_RGBA8, GL_RGBA);
+  return upload_texture(pixels, width, height, GL_RGBA8, GL_RGBA, GL_REPEAT);
+}
+
+unsigned upload_texture_r8_clamped(const uint8_t* pixels, int width, int height) {
+  return upload_texture(pixels, width, height, GL_R8, GL_RED, GL_CLAMP_TO_EDGE);
 }
 
 }  // namespace glutil
