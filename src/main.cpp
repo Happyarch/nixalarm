@@ -56,7 +56,7 @@ static void set_window_icon(SDL_Window* win) {
 
 static void usage() {
   std::cout <<
-      "nixalarm 0.1.0\n"
+      "nixalarm " NIXALARM_VERSION "\n"
       "Usage: nixalarm [OPTIONS] [HH:MM]\n\n"
       "Options:\n"
       "  --config PATH        Read config from PATH instead of XDG config.\n"
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "--help") { usage(); return 0; }
-    if (arg == "--version") { std::cout << "nixalarm 0.1.0\n"; return 0; }
+    if (arg == "--version") { std::cout << "nixalarm " NIXALARM_VERSION "\n"; return 0; }
     if (arg == "--config" && i + 1 < argc) config_path = argv[++i];
     else if (arg == "--source" && i + 1 < argc) source_override = argv[++i];
     else if (arg == "--test-source" && i + 1 < argc) test_source = argv[++i];

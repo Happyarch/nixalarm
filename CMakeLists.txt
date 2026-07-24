@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(nixalarm VERSION 0.1.0 LANGUAGES CXX)
+project(nixalarm VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,8 +65,11 @@ add_executable(nixalarm
 target_include_directories(nixalarm PRIVATE src third_party)
 target_compile_options(nixalarm PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(nixalarm PRIVATE dial_math dial_render analog_clock)
+# --version/--help print PROJECT_VERSION rather than their own copy of it, so
+# the one in project() above is the single place a release bump has to touch.
 target_compile_definitions(nixalarm PRIVATE
-  NIXALARM_DATADIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/nixalarm")
+  NIXALARM_DATADIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/nixalarm"
+  NIXALARM_VERSION="${PROJECT_VERSION}")
 target_link_libraries(nixalarm PRIVATE
   PkgConfig::SDL2
   PkgConfig::AVFORMAT

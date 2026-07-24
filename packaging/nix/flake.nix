@@ -15,11 +15,13 @@
       packages = forAllSystems ({ pkgs }: {
         default = pkgs.stdenv.mkDerivation {
           pname = "nixalarm";
-          version = "0.1.0";
+          version = "0.2.0";
           src = ../..;
 
           nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config ];
-          buildInputs = [ pkgs.SDL2 pkgs.ffmpeg pkgs.fluidsynth ];
+          # librsvg renders the analog face's SVG dial; libGL/libepoxy back the
+          # raytraced sundial/moondial faces.
+          buildInputs = [ pkgs.SDL2 pkgs.ffmpeg pkgs.fluidsynth pkgs.librsvg pkgs.libepoxy ];
 
           cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
         };
@@ -34,6 +36,8 @@
             pkgs.SDL2
             pkgs.ffmpeg
             pkgs.fluidsynth
+            pkgs.librsvg
+            pkgs.libepoxy
           ];
         };
       });

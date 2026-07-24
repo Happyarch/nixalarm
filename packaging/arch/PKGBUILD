@@ -1,12 +1,14 @@
 # Maintainer: happyarch
 pkgname=nixalarm
-pkgver=0.1.0
-pkgrel=2
-pkgdesc='Small Linux alarm clock with seven-segment display and file, stream, and optional SDR audio sources'
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='Small Linux alarm clock with seven-segment, nixie, analog, and sundial displays and file, stream, and optional SDR audio sources'
 arch=('x86_64' 'aarch64' 'armv7h' 'riscv64' 'loong64')
 url='https://github.com/Happyarch/nixalarm'
 license=('GPL-3.0-or-later')
-depends=('sdl2' 'ffmpeg' 'fluidsynth' 'gcc-libs' 'glibc')
+# librsvg renders the analog face's SVG dial; libepoxy loads the GL entry
+# points for the raytraced sundial/moondial faces.
+depends=('sdl2' 'ffmpeg' 'fluidsynth' 'librsvg' 'libepoxy' 'gcc-libs' 'glibc')
 makedepends=('cmake' 'gcc' 'pkgconf')
 optdepends=('rtl-sdr: RTL-SDR NOAA weather-band alarm sources via rtl_fm')
 source=()
