@@ -220,7 +220,8 @@ The internet NOAA-weather-radio URLs are community mirrors when available. WNG-5
 
 ## Themes
 
-Set `theme` in `[style]` before any color overrides:
+Set `theme` in `[style]` before any color overrides. A theme picks both the
+clock rendering style and its colors:
 
 ```toml
 [style]
@@ -230,10 +231,11 @@ show_seconds = false
 
 Built-in themes:
 
-- `terminal_glow`: original dark green background, bright green glowing digits.
-- `sinnoh_green`: light green pixel-clock style with dark green block digits, matching the provided Pokémon DS-style reference more closely.
+- `terminal_glow`: seven-segment digits, original dark green background, bright green glowing digits.
+- `sinnoh_green`: seven-segment digits, light green pixel-clock style with dark green block digits, matching the provided Pokémon DS-style reference more closely.
+- `nixie`: photoreal nixie-tube digits. Does not use the color overrides below.
 
-You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting a theme.
+You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting `terminal_glow` or `sinnoh_green`; the `nixie` theme ignores them.
 
 ## MIDI
 

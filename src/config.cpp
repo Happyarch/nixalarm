@@ -51,6 +51,7 @@ static Color parse_color(const std::string& raw, Color fallback) {
 static bool apply_theme(Config& cfg, const std::string& theme) {
   if (theme == "terminal_glow") {
     cfg.theme = theme;
+    cfg.clock_face = "seven_segment";
     cfg.background = Color{7, 24, 11, 255};
     cfg.segment_on = Color{108, 255, 87, 255};
     cfg.segment_off = Color{18, 51, 25, 255};
@@ -59,10 +60,16 @@ static bool apply_theme(Config& cfg, const std::string& theme) {
   }
   if (theme == "sinnoh_green") {
     cfg.theme = theme;
+    cfg.clock_face = "seven_segment";
     cfg.background = Color{113, 177, 108, 255};
     cfg.segment_on = Color{44, 91, 51, 255};
     cfg.segment_off = Color{104, 166, 99, 255};
     cfg.glow = false;
+    return true;
+  }
+  if (theme == "nixie") {
+    cfg.theme = theme;
+    cfg.clock_face = "nixie";
     return true;
   }
   return false;
@@ -130,9 +137,9 @@ static std::string default_config_text() {
       "flash_hz = 2.0\n"
       "\n"
       "[style]\n"
+      "# theme selects both the clock rendering style and its colors.\n"
+      "# Built-in: terminal_glow, sinnoh_green, nixie.\n"
       "theme = \"terminal_glow\"\n"
-      "# face selects the clock rendering style. Only seven_segment ships today.\n"
-      "# face = \"seven_segment\"\n"
       "show_seconds = false\n"
       "\n"
       "# No-SDR Caldwell/Lenoir NOAA backup.\n"
@@ -267,8 +274,7 @@ Config load_config(const fs::path& path) {
           if (!apply_theme(cfg, theme)) {
             std::cerr << "nixalarm: unknown theme: " << theme << "\n";
           }
-        } else if (key == "face") cfg.clock_face = unquote(val);
-        else if (key == "background") cfg.background = parse_color(val, cfg.background);
+        } else if (key == "background") cfg.background = parse_color(val, cfg.background);
         else if (key == "segment_on") cfg.segment_on = parse_color(val, cfg.segment_on);
         else if (key == "segment_off") cfg.segment_off = parse_color(val, cfg.segment_off);
         else if (key == "glow") cfg.glow = parse_bool(val);
