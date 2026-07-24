@@ -73,16 +73,20 @@ std::vector<unsigned char> read_file(const std::string& path) {
                                     std::istreambuf_iterator<char>());
 }
 
-// Resolve the runtime asset directory: env override, then the installed data dir,
-// then dev locations relative to the CWD and the executable.
-std::string find_asset_dir() {
+// Resolve the runtime asset directory for a given tube layout ("nixie" for the
+// 6-tube HH:MM:SS set, "nixie-hhmm" for the 4-tube HH:MM set): env override,
+// then the installed data dir, then dev locations relative to the CWD and the
+// executable. NIXALARM_ASSET_DIR is an unconditional override of whichever
+// layout is being resolved, for pointing at a single staged dir during asset
+// development.
+std::string find_asset_dir(const std::string& subdir) {
   std::vector<std::string> candidates;
   if (const char* e = std::getenv("NIXALARM_ASSET_DIR"); e && *e) candidates.emplace_back(e);
-  candidates.emplace_back(std::string(NIXALARM_DATADIR) + "/nixie");
-  candidates.emplace_back("assets/runtime/nixie");
+  candidates.emplace_back(std::string(NIXALARM_DATADIR) + "/" + subdir);
+  candidates.emplace_back("assets/runtime/" + subdir);
   if (char* base = SDL_GetBasePath()) {
-    candidates.emplace_back(std::string(base) + "../share/nixalarm/nixie");
-    candidates.emplace_back(std::string(base) + "assets/runtime/nixie");
+    candidates.emplace_back(std::string(base) + "../share/nixalarm/" + subdir);
+    candidates.emplace_back(std::string(base) + "assets/runtime/" + subdir);
     SDL_free(base);
   }
   for (const auto& c : candidates) {
@@ -97,7 +101,7 @@ class NixieClock : public ClockFace {
   void render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
 
  private:
-  bool ensure_loaded(SDL_Renderer* r);
+  bool ensure_loaded(SDL_Renderer* r, bool show_seconds);
   bool load_image(SDL_Renderer* r, const std::string& file, Image& out);
   void ensure_target(SDL_Renderer* r, int cw, int ch);
   void recompose(SDL_Renderer* r, const std::string& digits);
@@ -137,11 +141,15 @@ bool NixieClock::load_image(SDL_Renderer* r, const std::string& file, Image& out
   return out.tex != nullptr;
 }
 
-bool NixieClock::ensure_loaded(SDL_Renderer* r) {
+bool NixieClock::ensure_loaded(SDL_Renderer* r, bool show_seconds) {
   if (tried_load_) return ok_;
   tried_load_ = true;
 
-  dir_ = find_asset_dir();
+  // show_seconds picks the 4-tube HH:MM plate over the 6-tube HH:MM:SS one; fall
+  // back to HH:MM:SS (leaving the extra tubes unlit) if HH:MM assets aren't staged.
+  const std::string wanted = show_seconds ? "nixie" : "nixie-hhmm";
+  dir_ = find_asset_dir(wanted);
+  if (dir_.empty() && wanted != "nixie") dir_ = find_asset_dir("nixie");
   if (dir_.empty()) {
     std::cerr << "nixalarm: nixie assets not found (set NIXALARM_ASSET_DIR)\n";
     return false;
@@ -156,7 +164,7 @@ bool NixieClock::ensure_loaded(SDL_Renderer* r) {
   cell_w_ = static_cast<int>(json_int(meta, "cell_w"));
   cell_h_ = static_cast<int>(json_int(meta, "cell_h"));
   tubes_ = json_boxes(meta, "tube_boxes");
-  if (master_w_ <= 0 || master_h_ <= 0 || cell_w_ <= 0 || tubes_.size() < 6) {
+  if (master_w_ <= 0 || master_h_ <= 0 || cell_w_ <= 0 || tubes_.empty()) {
     std::cerr << "nixalarm: bad nixie meta.json\n";
     return false;
   }
@@ -244,7 +252,7 @@ void NixieClock::render(SDL_Renderer* r, int ww, int wh, const Config& cfg, cons
   SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
   SDL_RenderClear(r);
 
-  if (!ensure_loaded(r)) {
+  if (!ensure_loaded(r, cfg.show_seconds)) {
     SDL_RenderPresent(r);  // black frame; error already logged once
     return;
   }

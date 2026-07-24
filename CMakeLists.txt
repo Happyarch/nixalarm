@@ -41,6 +41,14 @@ install(TARGETS nixalarm RUNTIME DESTINATION bin)
 install(DIRECTORY assets/runtime/nixie
         DESTINATION ${CMAKE_INSTALL_DATADIR}/nixalarm
         FILES_MATCHING PATTERN "*.png" PATTERN "*.json")
+# HH:MM (4-tube) nixie layout, used when show_seconds = false. Still being authored,
+# so it's not guaranteed to exist in every checkout -- install it opportunistically
+# rather than failing configure/packaging when it's absent.
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/runtime/nixie-hhmm")
+  install(DIRECTORY assets/runtime/nixie-hhmm
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/nixalarm
+          FILES_MATCHING PATTERN "*.png" PATTERN "*.json")
+endif()
 install(FILES docs/man/nixalarm.1 DESTINATION share/man/man1)
 install(FILES docs/man/nixalarm.5 DESTINATION share/man/man5)
 install(FILES data/nixalarm.desktop DESTINATION share/applications)
