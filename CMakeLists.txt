@@ -49,6 +49,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/assets/runtime/nixie-hhmm")
           DESTINATION ${CMAKE_INSTALL_DATADIR}/nixalarm
           FILES_MATCHING PATTERN "*.png" PATTERN "*.json")
 endif()
+install(FILES assets/runtime/icon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/nixalarm)
+install(FILES data/icons/hicolor/scalable/apps/nixalarm.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES docs/man/nixalarm.1 DESTINATION share/man/man1)
 install(FILES docs/man/nixalarm.5 DESTINATION share/man/man5)
 install(FILES data/nixalarm.desktop DESTINATION share/applications)
