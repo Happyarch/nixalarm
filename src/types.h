@@ -53,5 +53,9 @@ struct Config {
   Color segment_off{18, 51, 25, 255};
   bool glow = true;
   bool show_seconds = false;
+  bool roman_numerals = false;
+  std::string analog_midnight_label = "24";
+  double latitude = 0.0;
+  double longitude = 0.0;
   std::map<std::string, Source> sources;
 };

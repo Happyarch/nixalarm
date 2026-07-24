@@ -98,7 +98,7 @@ std::string find_asset_dir(const std::string& subdir) {
 
 class NixieClock : public ClockFace {
  public:
-  void render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
+  void render(SDL_Window* win, SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
 
  private:
   bool ensure_loaded(SDL_Renderer* r, bool show_seconds);
@@ -280,7 +280,8 @@ std::string NixieClock::time_digits(const Config& cfg, std::string& text) {
   return text;
 }
 
-void NixieClock::render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) {
+void NixieClock::render(SDL_Window* /*win*/, SDL_Renderer* r, int ww, int wh, const Config& cfg,
+                         const RingState& ring) {
   ensure_background(r);
   if (background_) {
     SDL_Rect full{0, 0, ww, wh};

@@ -68,6 +68,27 @@ Use a 24-hour clock display. The default
 .B false
 uses 12-hour display. Alarm times on the command line still use 24-hour
 .IR HH:MM .
+.TP
+.B latitude = 0.0
+Observer latitude in signed degrees, positive north, clamped to
+.RB [ -90 ,
+.BR 90 ].
+Used only by the
+.B sundial
+and
+.B moondial
+themes, whose accuracy depends on it; the default 0.0 is not a sentinel but a
+real place (off the west coast of Africa).
+.TP
+.B longitude = 0.0
+Observer longitude in signed degrees, positive east, clamped to
+.RB [ -180 ,
+.BR 180 ].
+Used only by the
+.B sundial
+and
+.B moondial
+themes.
 .SH WINDOW SECTION
 .SS [window]
 .TP
@@ -107,6 +128,29 @@ digits and no glow.
 .TP
 .B nixie
 Photoreal nixie-tube digits. Does not use the color overrides below.
+.TP
+.B analog
+SVG-rendered analog dial based on the public-domain Wikimedia Commons animated
+analog clock, with the original script/branding removed and the hand motion
+driven by C++. A small alarm marker appears when an alarm or snooze is pending
+and pulses while ringing.
+.TP
+.B sundial
+A horizontal sundial, ray-traced in OpenGL, telling the time by the shadow the
+sun actually casts at the configured
+.B latitude
+and
+.BR longitude .
+The plate tilt and hour-line spacing are optimized for that latitude at
+startup. Requires OpenGL 3.3. Does not use the color overrides below apart
+from
+.BR background ,
+which fills the area around the dial. Dark while the sun is below the horizon.
+.TP
+.B moondial
+The same dial read by moonlight, in a night grade. Dark while the moon is
+below the horizon or new. Same requirements and color behavior as
+.BR sundial .
 .RE
 .TP
 .B background = "#07180b"
@@ -130,7 +174,22 @@ Draw a soft glow behind active segments. Ignored by the
 theme.
 .TP
 .B show_seconds = false
-Show seconds in the clock display.
+Show seconds in the clock display. For the
+.B analog
+theme, this draws or hides only the seconds hand; the
+.B analog
+theme enables it by default.
+.TP
+.B roman_numerals = false
+For the
+.B analog
+theme, use the Roman-numeral SVG face instead of the default Arabic-numeral
+SVG face.
+.TP
+.B analog_midnight_label = "24"
+Reserved for non-SVG 24-hour analog faces; ignored by the current
+.B analog
+theme, which follows its source SVG's 12-hour Arabic dial.
 .SH SOURCE SECTIONS
 .SS [sources.NAME]
 Each source section adds or overrides an audio source named
@@ -203,6 +262,8 @@ volume = 0.9
 source_start_timeout_seconds = 8
 fallback_source = "generated"
 use_24_hour = false
+latitude = 0.0
+longitude = 0.0
 
 [window]
 width = 800
@@ -214,6 +275,8 @@ flash_hz = 2.0
 [style]
 theme = "sinnoh_green"
 show_seconds = false
+roman_numerals = false
+analog_midnight_label = "24"
 
 [sources.local_song]
 type = "file"

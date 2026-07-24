@@ -15,7 +15,10 @@ derivatives, etc.).
 
 | File | Source | License | Author / Credit | Notes |
 |------|--------|---------|-----------------|-------|
-| _(add rows as you drop files into `base/`)_ | | | | |
+| `assets/runtime/analog/clock_face.svg`, `assets/runtime/analog/clock_face_roman.svg` | Wikimedia Commons `Animated analog SVG clock.svg` | Public domain | Fleshgrinder | JavaScript instruction text, SMIL hand animation, and branding/credit text are not included; hand motion is implemented in C++. Roman variant swaps the Arabic numeral paths for SVG text labels. |
+| `assets/runtime/dial/gnomon_diffuse.png`, `assets/runtime/dial/gnomon_normal.png`, `assets/runtime/dial/gnomon_params.png` | [3dtextures.me Metal 007](https://3dtextures.me/2025/01/20/metal-007/) | CC0 | João Paulo (3dtextures.me) — credit as courtesy | Sundial/moondial gnomon rod maps. diffuse = basecolor as-is; normal as-is; params = RGBA channel-pack of R=inverted roughness, G=ambient occlusion, B=height, A=metallic. Packed with ImageMagick from the 1024px pack. |
+| `assets/runtime/dial/plate_diffuse.png`, `assets/runtime/dial/plate_normal.png`, `assets/runtime/dial/plate_params.png` | [3dtextures.me Cobblestone Irregular Floor 001](https://3dtextures.me/2025/12/23/cobblestone-irregular-floor-001/) | CC0 | João Paulo (3dtextures.me) — credit as courtesy | Sundial/moondial baseplate maps. diffuse = basecolor as-is; normal as-is; params = RGBA channel-pack of R=inverted roughness, G=ambient occlusion, B=height, A=black (dielectric). Packed with ImageMagick from the 1024px pack. |
+| `assets/runtime/dial/ground_diffuse.png`, `assets/runtime/dial/ground_normal.png`, `assets/runtime/dial/ground_params.png` | [3dtextures.me Grass 003 (with flowers)](https://3dtextures.me/2018/05/01/grass-003-with-flowers/) | CC0 | João Paulo (3dtextures.me) — credit as courtesy | Sundial/moondial ground-plane maps. diffuse = COLOR as-is; normal = NRM; params = RGBA channel-pack of R=inverted ROUGH, G=OCC, B=DISP, A=black (dielectric). JPEG sources converted/resized to 1024px PNG with ImageMagick. |
 
 ### License quick-reference (for this project)
 

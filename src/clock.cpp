@@ -1,6 +1,9 @@
 #include "clock.h"
 
+#include "analog.h"
+#include "moondial.h"
 #include "nixie.h"
+#include "sundial.h"
 
 #include <algorithm>
 #include <chrono>
@@ -17,7 +20,7 @@ namespace {
 // Config (the theme), so this class holds no per-frame state of its own.
 class SevenSegmentClock : public ClockFace {
  public:
-  void render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
+  void render(SDL_Window* win, SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
 
  private:
   static const bool kSegments[10][7];
@@ -77,7 +80,8 @@ void SevenSegmentClock::draw_colon(SDL_Renderer* r, float x, float y, float size
   fill_rect(r, x, y + size * 0.62f, d, d, cfg.segment_on);
 }
 
-void SevenSegmentClock::render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) {
+void SevenSegmentClock::render(SDL_Window* /*win*/, SDL_Renderer* r, int ww, int wh, const Config& cfg,
+                                const RingState& ring) {
   bool flash_digits_off = false;
   if (ring.ringing && cfg.flash_hz > 0.0) {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
@@ -139,6 +143,15 @@ std::unique_ptr<ClockFace> make_clock_face(const Config& cfg) {
   }
   if (cfg.clock_face == "nixie") {
     return make_nixie_clock();
+  }
+  if (cfg.clock_face == "analog") {
+    return make_analog_clock();
+  }
+  if (cfg.clock_face == "sundial") {
+    return make_sundial_clock(cfg);
+  }
+  if (cfg.clock_face == "moondial") {
+    return make_moondial_clock(cfg);
   }
   std::cerr << "nixalarm: unknown clock face: " << cfg.clock_face << "; using seven_segment\n";
   return std::make_unique<SevenSegmentClock>();

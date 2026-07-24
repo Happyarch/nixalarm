@@ -1,0 +1,74 @@
+#include "dial_scene.h"
+
+#include <cmath>
+
+namespace {
+
+constexpr double kGnomonRodRadiusRatio = 0.035;  // relative to gnomon_length
+constexpr double kGlassLegRadiusRatio = 0.012;   // relative to gnomon_length; ~1/3 of the rod
+constexpr double kTickRodRadiusRatio = 0.010;    // relative to plate_radius
+constexpr double kTickInnerRadiusRatio = 0.22;
+constexpr double kTickOuterRadiusRatio = 0.95;
+constexpr double kPlateThicknessRatio = 0.05;  // relative to plate_radius
+constexpr double kGroundGapRatio = 0.02;       // gap between plate underside and ground
+
+}  // namespace
+
+DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientation, double gnomon_length,
+                            double plate_radius, bool moondial) {
+  DialScene scene;
+  scene.plate_radius = plate_radius;
+  scene.plate_thickness = plate_radius * kPlateThicknessRatio;
+  scene.ground_z = -(scene.plate_thickness + plate_radius * kGroundGapRatio);
+
+  // Substyle-aligned frame throughout: the rod rises along +u, and the tick
+  // shadow points below are computed in this same frame so gnomon and ticks
+  // can never spin apart (see dial_geometry.h).
+  PlateFrame frame = substyle_aligned_plate_frame(latitude_deg, orientation.slant_deg, orientation.declination_deg);
+  Vec3 style_local = project_to_local(style_vector_world(latitude_deg), frame);
+  Vec3 tip = style_local * gnomon_length;
+  scene.gnomon_tip_local = tip;
+
+  double rod_r = gnomon_length * kGnomonRodRadiusRatio;
+  double leg_r = gnomon_length * kGlassLegRadiusRatio;
+
+  // Solid shadow-casting rod: dial center to the nodus, along the style edge.
+  scene.rods.push_back(SceneRod{Vec3{0.0, 0.0, 0.0}, tip, rod_r, DialMaterial::Gnomon});
+
+  // Glass frame: the other two edges of the classic right triangle. Both
+  // degenerate honestly -- the vertical leg vanishes when the style lies in
+  // the plate (excluded by the optimizer's elevation floor anyway) and the
+  // base leg vanishes when the style is perpendicular to the plate (polar
+  // case, where the rod alone IS the whole triangle).
+  Vec3 foot{tip.x, tip.y, 0.0};
+  double horiz = std::sqrt(tip.x * tip.x + tip.y * tip.y);
+  if (horiz > 1e-9) {
+    scene.rods.push_back(SceneRod{Vec3{0.0, 0.0, 0.0}, foot, leg_r, DialMaterial::Glass});
+  }
+  if (tip.z > 1e-9) {
+    scene.rods.push_back(SceneRod{foot, tip, leg_r, DialMaterial::Glass});
+  }
+
+  double tick_r = plate_radius * kTickRodRadiusRatio;
+  double r_inner = plate_radius * kTickInnerRadiusRatio;
+  double r_outer = plate_radius * kTickOuterRadiusRatio;
+  for (double h = -165.0; h <= 165.0; h += 15.0) {
+    Vec3 light_w = idealized_light_direction_world(latitude_deg, h, moondial);
+    if (light_w.z <= 0.0) continue;  // sun/moon below the true horizon at this hour
+    ShadowSample s = shadow_point_on_plate(latitude_deg, frame, gnomon_length, h, moondial);
+    if (!s.valid) continue;
+    double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
+    if (len > plate_radius) continue;  // shadow off the edge of the plate at this hour
+    if (len < 1e-9) continue;
+    // Use the actual finite shadow point's direction (not hour_line_direction,
+    // which only gives an undirected line) so the tick lands on the correct
+    // side of the noon/midnight line, not its 180-degree mirror.
+    Vec2 dir{s.point_local.x / len, s.point_local.y / len};
+    // Centered on the plate surface, so half the capsule stands proud of it
+    // as a raised ridge the tracer can shade and shadow like everything else.
+    scene.rods.push_back(SceneRod{Vec3{dir.x * r_inner, dir.y * r_inner, 0.0},
+                                   Vec3{dir.x * r_outer, dir.y * r_outer, 0.0}, tick_r, DialMaterial::Tick});
+  }
+
+  return scene;
+}

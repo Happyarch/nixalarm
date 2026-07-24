@@ -13,6 +13,7 @@ Dependencies:
 - SDL2
 - FFmpeg development libraries: `libavformat`, `libavcodec`, `libavutil`, `libswresample`
 - FluidSynth development library
+- librsvg development library for the SVG analog clock face
 - Optional for SDR weather-band wake-up, only if you have SDR hardware: `rtl_fm`
 
 Example:
@@ -167,6 +168,8 @@ segment_on = "#6cff57"
 segment_off = "#123319"
 glow = true
 show_seconds = false
+roman_numerals = false
+analog_midnight_label = "24"
 
 [sources.local_song]
 type = "file"
@@ -216,7 +219,7 @@ Shorter SDR alias:
 ./build/nixalarm --source weatherband_162_425 07:30
 ```
 
-The internet NOAA-weather-radio URLs are community mirrors when available. NWR is configured as SDR-first because public listings do not show a reliable online stream for that transmitter. Without SDR hardware, use the example stream backup. Do not rely on this program or those streams for emergency alerting.
+The internet NOAA-weather-radio URLs are community mirrors when available. NWR is configured as SDR-first because public listings do not show a reliable online stream for that transmitter. Without SDR hardware, use the example stream backup.
 
 ## Themes
 
@@ -234,8 +237,15 @@ Built-in themes:
 - `terminal_glow`: seven-segment digits, original dark green background, bright green glowing digits.
 - `sinnoh_green`: seven-segment digits, light green pixel-clock style with dark green block digits, matching the provided Pokémon DS-style reference more closely.
 - `nixie`: photoreal nixie-tube digits. Does not use the color overrides below.
+- `analog`: SVG-rendered analog dial based on the public-domain Wikimedia Commons animated analog clock, with the original script/branding removed and the hand motion driven by C++.
+- `sundial`: a real horizontal sundial, ray-traced in OpenGL, telling the time by the shadow the sun actually casts right now at your `latitude`/`longitude`. Does not use the color overrides below.
+- `moondial`: the same dial read by moonlight instead, in a night grade. Does not use the color overrides below.
 
-You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting `terminal_glow` or `sinnoh_green`; the `nixie` theme ignores them.
+You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting `terminal_glow`, `sinnoh_green`, or `analog`; the `nixie`, `sundial`, and `moondial` themes ignore them (`background` still fills the area around the dial for the last two).
+
+For `analog`, the theme defaults to a smoothly sweeping red seconds hand; set `show_seconds = false` after `theme = "analog"` to hide only that hand. The face follows the source SVG's 12-hour Arabic dial by default; set `roman_numerals = true` to use the Roman-numeral SVG face. The hands use the same time math as the source SVG's JavaScript in native C++. A small alarm marker appears when an alarm or snooze is pending and pulses red while ringing.
+
+`sundial` and `moondial` are astronomical, not decorative: they compute the real solar or lunar position for the current instant and trace the shadow the gnomon would cast. **Set `latitude` and `longitude` in the top level of the config** (signed degrees, +N/-S and +E/-W) or the dial will be built and read for a point off the west coast of Africa. The plate's tilt and the hour-line spacing are optimized for your latitude at startup, and the camera is pinned to the plate, so the framing is the same wherever you are. Both faces need OpenGL 3.3. Note that a dial only tells the time while its light source is above the horizon: at night the sundial goes dark, and the moondial goes dark when the moon is down or new. Neither face draws a ringing indicator yet — a ringing alarm is signalled by sound alone.
 
 ## MIDI
 

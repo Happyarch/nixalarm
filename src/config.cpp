@@ -72,6 +72,28 @@ static bool apply_theme(Config& cfg, const std::string& theme) {
     cfg.clock_face = "nixie";
     return true;
   }
+  if (theme == "analog") {
+    cfg.theme = theme;
+    cfg.clock_face = "analog";
+    cfg.background = Color{240, 234, 214, 255};
+    cfg.segment_on = Color{0, 0, 0, 255};
+    cfg.segment_off = Color{116, 116, 116, 255};
+    cfg.glow = false;
+    cfg.show_seconds = true;
+    return true;
+  }
+  if (theme == "sundial") {
+    cfg.theme = theme;
+    cfg.clock_face = "sundial";
+    cfg.background = Color{214, 203, 173, 255};
+    return true;
+  }
+  if (theme == "moondial") {
+    cfg.theme = theme;
+    cfg.clock_face = "moondial";
+    cfg.background = Color{8, 12, 24, 255};
+    return true;
+  }
   return false;
 }
 
@@ -128,6 +150,11 @@ static std::string default_config_text() {
       "source_start_timeout_seconds = 8\n"
       "fallback_source = \"generated\"\n"
       "use_24_hour = false\n"
+      "# Used by the sundial/moondial themes for real sun/moon position.\n"
+      "# Signed degrees: latitude +N/-S, longitude +E/-W. Defaults to 0,0 (off Africa's\n"
+      "# west coast) until set -- sundial/moondial accuracy depends on this being correct.\n"
+      "latitude = 0.0\n"
+      "longitude = 0.0\n"
       "\n"
       "[window]\n"
       "width = 800\n"
@@ -138,9 +165,11 @@ static std::string default_config_text() {
       "\n"
       "[style]\n"
       "# theme selects both the clock rendering style and its colors.\n"
-      "# Built-in: terminal_glow, sinnoh_green, nixie.\n"
+      "# Built-in: terminal_glow, sinnoh_green, nixie, analog, sundial, moondial.\n"
       "theme = \"terminal_glow\"\n"
       "show_seconds = false\n"
+      "roman_numerals = false\n"
+      "analog_midnight_label = \"24\"\n"
       "\n"
       "# No-SDR the local area NOAA backup.\n"
       "[sources.weather_stream]\n"
@@ -262,6 +291,8 @@ Config load_config(const fs::path& path) {
         else if (key == "source_start_timeout_seconds") cfg.source_start_timeout_seconds = std::max(1, std::stoi(val));
         else if (key == "fallback_source") cfg.fallback_source = unquote(val);
         else if (key == "use_24_hour") cfg.use_24_hour = parse_bool(val);
+        else if (key == "latitude") cfg.latitude = std::clamp(std::stod(val), -90.0, 90.0);
+        else if (key == "longitude") cfg.longitude = std::clamp(std::stod(val), -180.0, 180.0);
       } else if (section == "window") {
         if (key == "width") cfg.width = std::max(240, std::stoi(val));
         else if (key == "height") cfg.height = std::max(160, std::stoi(val));
@@ -279,6 +310,16 @@ Config load_config(const fs::path& path) {
         else if (key == "segment_off") cfg.segment_off = parse_color(val, cfg.segment_off);
         else if (key == "glow") cfg.glow = parse_bool(val);
         else if (key == "show_seconds") cfg.show_seconds = parse_bool(val);
+        else if (key == "roman_numerals") cfg.roman_numerals = parse_bool(val);
+        else if (key == "analog_midnight_label") {
+          std::string label = unquote(val);
+          if (label == "24" || label == "0") {
+            cfg.analog_midnight_label = label;
+          } else {
+            std::cerr << "nixalarm: analog_midnight_label must be \"24\" or \"0\"; using "
+                      << cfg.analog_midnight_label << "\n";
+          }
+        }
       } else if (!source_name.empty()) {
         Source& s = cfg.sources[source_name];
         if (key == "type") {

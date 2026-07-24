@@ -141,7 +141,20 @@ int main(int argc, char** argv) {
   }
   std::atexit(SDL_Quit);
 
-  Uint32 flags = SDL_WINDOW_RESIZABLE;
+  // SDL_WINDOW_OPENGL is requested unconditionally: the sundial/moondial
+  // faces create their own SDL_GLContext on this window (src/dial_gl.cpp) and
+  // need the window to have been created with this flag. It's harmless for
+  // every other clock face, which keeps using the ordinary SDL_Renderer --
+  // SDL's own "opengl" renderer backend (the default accelerated backend on
+  // Linux) already requires this flag internally, so this doesn't change
+  // their behavior.
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+  Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL;
   if (cfg.fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
   if (cfg.always_on_top) flags |= SDL_WINDOW_ALWAYS_ON_TOP;
   SDL_Window* win = SDL_CreateWindow("nixalarm", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, cfg.width, cfg.height, flags);
@@ -207,7 +220,7 @@ int main(int argc, char** argv) {
 
     int ww = 0, wh = 0;
     SDL_GetWindowSize(win, &ww, &wh);
-    clock_face->render(renderer, ww, wh, cfg, {sched.ringing(), sched.hold_progress()});
+    clock_face->render(win, renderer, ww, wh, cfg, {sched.ringing(), sched.hold_progress(), sched.has_pending()});
     SDL_Delay(16);
   }
 
