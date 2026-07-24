@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -13,7 +14,45 @@
 #include "audio.h"
 #include "clock.h"
 #include "config.h"
+#include "stb_image.h"
 #include "types.h"
+
+#ifndef NIXALARM_DATADIR
+#define NIXALARM_DATADIR "/usr/local/share/nixalarm"
+#endif
+
+// Best-effort: set the window/taskbar icon from the rasterized app icon (SDL has
+// no SVG support, so this loads the pre-rendered assets/runtime/icon.png rather
+// than data/icons/.../nixalarm.svg). Silently does nothing if it can't be found --
+// the window still works, just with the platform's default icon.
+static void set_window_icon(SDL_Window* win) {
+  std::vector<std::string> candidates;
+  candidates.emplace_back(std::string(NIXALARM_DATADIR) + "/icon.png");
+  candidates.emplace_back("assets/runtime/icon.png");
+  if (char* base = SDL_GetBasePath()) {
+    candidates.emplace_back(std::string(base) + "../share/nixalarm/icon.png");
+    candidates.emplace_back(std::string(base) + "assets/runtime/icon.png");
+    SDL_free(base);
+  }
+  for (const auto& path : candidates) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) continue;
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(f)),
+                                      std::istreambuf_iterator<char>());
+    int w, h, n;
+    unsigned char* px = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()),
+                                               &w, &h, &n, 4);
+    if (!px) continue;
+    SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom(
+        px, w, h, 32, w * 4, SDL_PIXELFORMAT_ABGR8888);
+    if (icon) {
+      SDL_SetWindowIcon(win, icon);
+      SDL_FreeSurface(icon);
+    }
+    stbi_image_free(px);
+    return;
+  }
+}
 
 static void usage() {
   std::cout <<
@@ -110,6 +149,7 @@ int main(int argc, char** argv) {
     std::cerr << "nixalarm: window create failed: " << SDL_GetError() << "\n";
     return 1;
   }
+  set_window_icon(win);
   SDL_Renderer* renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!renderer) renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
   if (!renderer) {
