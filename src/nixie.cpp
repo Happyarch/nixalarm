@@ -105,6 +105,7 @@ class NixieClock : public ClockFace {
   bool load_image(SDL_Renderer* r, const std::string& file, Image& out);
   void ensure_target(SDL_Renderer* r, int cw, int ch);
   void recompose(SDL_Renderer* r, const std::string& digits);
+  void ensure_background(SDL_Renderer* r);
   static std::string time_digits(const Config& cfg, std::string& text);
 
   bool tried_load_ = false;
@@ -120,6 +121,8 @@ class NixieClock : public ClockFace {
   SDL_Texture* target_ = nullptr;
   int tw_ = 0, th_ = 0;              // current target (content) size
   std::string composed_;            // digit string currently baked into target_
+
+  SDL_Texture* background_ = nullptr;  // subtle radial vignette behind the letterbox
 };
 
 bool NixieClock::load_image(SDL_Renderer* r, const std::string& file, Image& out) {
@@ -230,6 +233,35 @@ void NixieClock::recompose(SDL_Renderer* r, const std::string& digits) {
   composed_ = digits;
 }
 
+// Bake a small radial gradient once (window-size independent; stretched to fill at
+// draw time) so the letterbox bars around the plate read as a soft dark vignette
+// instead of flat black. Warm near-black center, fading to pure black at the corners.
+void NixieClock::ensure_background(SDL_Renderer* r) {
+  if (background_) return;
+  constexpr int N = 512;
+  constexpr float center[3] = {16.0f, 14.0f, 12.0f};
+  std::vector<uint8_t> px(static_cast<size_t>(N) * N * 4);
+  const float cx = N / 2.0f, cy = N / 2.0f;
+  const float max_r = std::sqrt(cx * cx + cy * cy);
+  for (int y = 0; y < N; ++y) {
+    for (int x = 0; x < N; ++x) {
+      float dx = x - cx, dy = y - cy;
+      float t = std::clamp(std::sqrt(dx * dx + dy * dy) / max_r, 0.0f, 1.0f);
+      float s = t * t * (3.0f - 2.0f * t);  // smoothstep, avoids a banded-looking falloff
+      size_t idx = (static_cast<size_t>(y) * N + x) * 4;
+      px[idx + 0] = static_cast<uint8_t>(std::lround((1.0f - s) * center[0]));
+      px[idx + 1] = static_cast<uint8_t>(std::lround((1.0f - s) * center[1]));
+      px[idx + 2] = static_cast<uint8_t>(std::lround((1.0f - s) * center[2]));
+      px[idx + 3] = 255;
+    }
+  }
+  background_ = SDL_CreateTexture(r, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, N, N);
+  if (background_) {
+    SDL_UpdateTexture(background_, nullptr, px.data(), N * 4);
+    SDL_SetTextureBlendMode(background_, SDL_BLENDMODE_NONE);
+  }
+}
+
 std::string NixieClock::time_digits(const Config& cfg, std::string& text) {
   std::time_t now = Clock::to_time_t(Clock::now());
   std::tm tm{};
@@ -249,11 +281,17 @@ std::string NixieClock::time_digits(const Config& cfg, std::string& text) {
 }
 
 void NixieClock::render(SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) {
-  SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
-  SDL_RenderClear(r);
+  ensure_background(r);
+  if (background_) {
+    SDL_Rect full{0, 0, ww, wh};
+    SDL_RenderCopy(r, background_, nullptr, &full);
+  } else {
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+    SDL_RenderClear(r);
+  }
 
   if (!ensure_loaded(r, cfg.show_seconds)) {
-    SDL_RenderPresent(r);  // black frame; error already logged once
+    SDL_RenderPresent(r);  // vignette-only frame; error already logged once
     return;
   }
 
