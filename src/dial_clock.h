@@ -1,18 +1,14 @@
 #pragma once
 
-// Shared ClockFace implementation behind both src/sundial.h and
-// src/moondial.h. The two are the same dial read by two different lights, so
-// this class builds BOTH forms up front -- the sun dial and the moon dial are
-// genuinely different plates (the optimizer picks a different tilt for each,
-// and the hour lines run in different directions), so they can't be one scene
-// with a swapped light -- and shows whichever one the sky currently supports.
+// Shared ClockFace implementation behind src/sundial.h, src/moondial.h and
+// src/auto_dial.h. The sun dial and the moon dial are the same instrument read
+// by two different lights, but they are NOT the same plate: the optimizer
+// picks a different tilt for each and the hour lines run in different
+// directions, so they can't be one scene with a swapped light source. This
+// class builds both and shows one.
 //
-// A sundial that goes blank at dusk is a dead clock, so when the sun sets and
-// the moon is up the face changes over to the moon dial, and back at sunrise.
-// The changeover is visible: the plate re-tilts and the hour lines jump,
-// because they really are two different instruments. When neither body is up
-// there is no time to tell, so the face holds whichever form it was already
-// showing (dark) rather than flipping to the other for no reason.
+// Which one, and whether it ever changes, is the DialMode -- the three dial
+// themes are exactly these three modes.
 
 #include <memory>
 
@@ -21,12 +17,20 @@
 #include "dial_scene.h"
 #include "types.h"
 
+enum class DialMode {
+  // Pinned. The dial never changes out from under you; it simply goes dark
+  // when its own light is gone, the way the real instrument in a garden does.
+  SunOnly,
+  MoonOnly,
+  // Follows the sky: whichever dial can currently be read is the one shown,
+  // crossfading from one to the other at the changeover. A dial that goes
+  // blank at dusk is a dead clock, and this is the mode that fixes that.
+  Auto,
+};
+
 class DialClockFace : public ClockFace {
  public:
-  // `prefer_moondial` is the configured theme. It decides only which form is
-  // shown before the sky has been consulted and when neither body is up; from
-  // then on the sky decides.
-  DialClockFace(const Config& cfg, bool prefer_moondial);
+  DialClockFace(const Config& cfg, DialMode mode);
   void render(SDL_Window* win, SDL_Renderer* r, int ww, int wh, const Config& cfg, const RingState& ring) override;
 
  private:
@@ -52,8 +56,12 @@ class DialClockFace : public ClockFace {
   // gnomon's shadow landing on the plate, not merely about the body being up.
   bool is_readable(const Form& form, double jd) const;
 
+  // No-op unless the mode is Auto. Picks the opening dial on the first frame
+  // (without a crossfade -- there is nothing to fade from at startup), and
+  // thereafter changes over when the current dial stops being readable.
   void update_form_choice(double jd, double now_seconds);
 
+  DialMode mode_;
   double latitude_deg_;
   double longitude_deg_;
   Form sun_form_;
@@ -61,8 +69,9 @@ class DialClockFace : public ClockFace {
   FixedCameraOffset camera_;
   DialGlRenderer gl_renderer_;
   bool showing_moondial_;
+  bool chose_opening_form_ = false;
   bool fading_ = false;
   double fade_start_seconds_ = 0.0;
 };
 
-std::unique_ptr<ClockFace> make_dial_clock(const Config& cfg, bool prefer_moondial);
+std::unique_ptr<ClockFace> make_dial_clock(const Config& cfg, DialMode mode);

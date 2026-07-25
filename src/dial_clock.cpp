@@ -83,13 +83,14 @@ DialClockFace::Form DialClockFace::make_form(const Config& cfg, bool moondial, c
   return form;
 }
 
-DialClockFace::DialClockFace(const Config& cfg, bool prefer_moondial)
-    : latitude_deg_(cfg.latitude),
+DialClockFace::DialClockFace(const Config& cfg, DialMode mode)
+    : mode_(mode),
+      latitude_deg_(cfg.latitude),
       longitude_deg_(cfg.longitude),
       sun_form_(make_form(cfg, /*moondial=*/false, kSunPalette)),
       moon_form_(make_form(cfg, /*moondial=*/true, kMoonPalette)),
       camera_(default_camera()),
-      showing_moondial_(prefer_moondial) {}
+      showing_moondial_(mode == DialMode::MoonOnly) {}
 
 Vec3 DialClockFace::light_for(const Form& form, double jd) const {
   EquatorialCoord eq = form.moondial ? lunar_position(jd) : solar_position_full(jd).eq;
@@ -117,6 +118,24 @@ bool DialClockFace::is_readable(const Form& form, double jd) const {
 // swapping to an equally unreadable dial. Staying put is also what keeps this
 // from flapping around the moment either condition is marginal.
 void DialClockFace::update_form_choice(double jd, double now_seconds) {
+  if (mode_ != DialMode::Auto) return;  // pinned: the dial never changes
+
+  // Opening frame: there is no dial to fade FROM, so pick the right one
+  // outright. Prefer whichever can be read; failing that (launched into a
+  // moonless night) open on the dial whose body is at least on the correct
+  // side of the horizon, so the dark plate on screen is the plausible one.
+  if (!chose_opening_form_) {
+    chose_opening_form_ = true;
+    if (is_readable(sun_form_, jd)) {
+      showing_moondial_ = false;
+    } else if (is_readable(moon_form_, jd)) {
+      showing_moondial_ = true;
+    } else {
+      showing_moondial_ = normalize(light_for(sun_form_, jd)).z <= 0.0;
+    }
+    return;
+  }
+
   const Form& current = showing_moondial_ ? moon_form_ : sun_form_;
   if (is_readable(current, jd)) return;
 
@@ -173,6 +192,6 @@ void DialClockFace::render(SDL_Window* win, SDL_Renderer* /*r*/, int ww, int wh,
   gl_renderer_.end_frame(win);
 }
 
-std::unique_ptr<ClockFace> make_dial_clock(const Config& cfg, bool prefer_moondial) {
-  return std::make_unique<DialClockFace>(cfg, prefer_moondial);
+std::unique_ptr<ClockFace> make_dial_clock(const Config& cfg, DialMode mode) {
+  return std::make_unique<DialClockFace>(cfg, mode);
 }

@@ -94,6 +94,14 @@ static bool apply_theme(Config& cfg, const std::string& theme) {
     cfg.background = Color{8, 12, 24, 255};
     return true;
   }
+  if (theme == "auto_dial") {
+    cfg.theme = theme;
+    cfg.clock_face = "auto_dial";
+    // Between the sundial's warm stone and the moondial's near-black, since
+    // this theme is both of them in turn.
+    cfg.background = Color{40, 42, 48, 255};
+    return true;
+  }
   return false;
 }
 
@@ -150,9 +158,9 @@ static std::string default_config_text() {
       "source_start_timeout_seconds = 8\n"
       "fallback_source = \"generated\"\n"
       "use_24_hour = false\n"
-      "# Used by the sundial/moondial themes for real sun/moon position.\n"
+      "# Used by the dial themes for real sun/moon position.\n"
       "# Signed degrees: latitude +N/-S, longitude +E/-W. Defaults to 0,0 (off Africa's\n"
-      "# west coast) until set -- sundial/moondial accuracy depends on this being correct.\n"
+      "# west coast) until set -- dial accuracy depends on this being correct.\n"
       "latitude = 0.0\n"
       "longitude = 0.0\n"
       "\n"
@@ -165,7 +173,7 @@ static std::string default_config_text() {
       "\n"
       "[style]\n"
       "# theme selects both the clock rendering style and its colors.\n"
-      "# Built-in: terminal_glow, sinnoh_green, nixie, analog, sundial, moondial.\n"
+      "# Built-in: terminal_glow, sinnoh_green, nixie, analog, sundial, moondial, auto_dial.\n"
       "theme = \"terminal_glow\"\n"
       "show_seconds = false\n"
       "roman_numerals = false\n"

@@ -74,9 +74,10 @@ Observer latitude in signed degrees, positive north, clamped to
 .RB [ -90 ,
 .BR 90 ].
 Used only by the
-.B sundial
-and
+.BR sundial ,
 .B moondial
+and
+.B auto_dial
 themes, whose accuracy depends on it; the default 0.0 is not a sentinel but a
 real place (off the west coast of Africa).
 .TP
@@ -85,9 +86,10 @@ Observer longitude in signed degrees, positive east, clamped to
 .RB [ -180 ,
 .BR 180 ].
 Used only by the
-.B sundial
-and
+.BR sundial ,
 .B moondial
+and
+.B auto_dial
 themes.
 .SH WINDOW SECTION
 .SS [window]
@@ -145,21 +147,22 @@ The plate tilt and hour-line spacing are optimized for that latitude at
 startup. Requires OpenGL 3.3. Does not use the color overrides below apart
 from
 .BR background ,
-which fills the area around the dial.
-.IP
-A dial only works while its own light is up, so this theme shows a sun dial
-and a moon dial in turn, crossfading between them. The changeover follows
-readability rather than sunset: a dial stops telling the time once the
-gnomon's shadow slides off the edge of the plate, some while before the body
-sets, and the moon dial takes over only if the moon is up and more than
-roughly a quarter lit. When neither dial can be read the face holds the one
-it was showing and goes dark.
+which fills the area around the dial. Dark once the sun can no longer be read.
 .TP
 .B moondial
-The same pair of dials as
-.BR sundial ,
-opening on the moon dial rather than the sun dial and falling back to it when
-neither can be read. Same requirements and color behavior.
+The same instrument built for the Moon instead, and dark by day. Same
+requirements and color behavior as
+.BR sundial .
+.TP
+.B auto_dial
+Both dials as one clock: whichever can currently be read, crossfading from one
+to the other at the changeover. The changeover follows readability rather than
+sunset -- a dial stops telling the time once the gnomon's shadow slides off the
+edge of the plate, some while before the body sets -- and the moon dial takes
+over only if the Moon is up and more than roughly a quarter lit. When neither
+dial can be read the face holds the one it was showing and goes dark. Same
+requirements and color behavior as
+.BR sundial .
 .RE
 .TP
 .B background = "#07180b"

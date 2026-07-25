@@ -2,12 +2,10 @@
 
 #include "dial_clock.h"
 
-// Both dial themes are the same face (see dial_clock.h): it builds the sun
-// dial and the moon dial and shows whichever the sky currently supports,
-// changing over when one stops being readable. The theme only says which one
-// to open with, and which to fall back on when neither body can be read --
-// so `sundial` is the dial that starts in the day and holds daylight when the
-// night is moonless. The palettes for both live in dial_clock.cpp.
+// The sun dial, pinned: it is only ever the sun's dial, and goes dark when the
+// sun is gone, like the real thing in a garden. Use the `auto_dial` theme if
+// you want it to hand over to the moon dial after dark instead. All three dial
+// themes are the same face in different DialModes -- see dial_clock.h.
 std::unique_ptr<ClockFace> make_sundial_clock(const Config& cfg) {
-  return make_dial_clock(cfg, /*prefer_moondial=*/false);
+  return make_dial_clock(cfg, DialMode::SunOnly);
 }

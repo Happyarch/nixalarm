@@ -36,6 +36,7 @@ add_library(dial_render STATIC
   src/dial_clock.cpp
   src/sundial.cpp
   src/moondial.cpp
+  src/auto_dial.cpp
   src/gl_util.cpp
   src/procedural_texture.cpp
 )

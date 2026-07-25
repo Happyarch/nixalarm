@@ -1,6 +1,7 @@
 #include "clock.h"
 
 #include "analog.h"
+#include "auto_dial.h"
 #include "moondial.h"
 #include "nixie.h"
 #include "sundial.h"
@@ -152,6 +153,9 @@ std::unique_ptr<ClockFace> make_clock_face(const Config& cfg) {
   }
   if (cfg.clock_face == "moondial") {
     return make_moondial_clock(cfg);
+  }
+  if (cfg.clock_face == "auto_dial") {
+    return make_auto_dial_clock(cfg);
   }
   std::cerr << "nixalarm: unknown clock face: " << cfg.clock_face << "; using seven_segment\n";
   return std::make_unique<SevenSegmentClock>();
