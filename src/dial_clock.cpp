@@ -42,14 +42,15 @@ constexpr DialPalette kSunPalette{
 // The tints are the cool counterpart of the sun dial's: pale grey stone,
 // tarnished silver gnomon, dew-dark grass, pewter ticks. Moonlight runs about
 // a third of the sun dial's exposure -- enough for a sharp gnomon shadow and
-// no more -- and the near-black sky fill drops unlit surfaces to silhouette.
+// no more -- while the sky fill sits well above black so unlit surfaces stay
+// readable as dim grey rather than dropping to silhouette.
 constexpr DialPalette kMoonPalette{
     Vec3{0.16, 0.24, 0.18},  // ground
     Vec3{0.48, 0.50, 0.54},  // plate
     Vec3{0.42, 0.45, 0.50},  // gnomon
     Vec3{0.66, 0.70, 0.76},  // ticks
     Vec3{0.26, 0.30, 0.40},  // moonlight
-    Vec3{0.05, 0.06, 0.10},  // sky fill
+    Vec3{0.10, 0.12, 0.18},  // sky fill
 };
 
 // Long enough to read as a dissolve rather than a glitch, short enough not to

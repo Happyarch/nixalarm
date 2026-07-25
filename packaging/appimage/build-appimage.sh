@@ -25,18 +25,8 @@ EOF
 chmod +x "$appdir/AppRun"
 
 cp "$project_root/data/nixalarm.desktop" "$appdir/nixalarm.desktop"
-icon_src=$(
-  find /usr/share/icons -name 'preferences-system-time.png' -o -name 'preferences-system-time.svg' |
-    sort -Vr |
-    sed -n '1p'
-)
-if [[ -n "$icon_src" ]]; then
-  icon_ext="${icon_src##*.}"
-  cp "$icon_src" "$appdir/preferences-system-time.${icon_ext}"
-  cp "$icon_src" "$appdir/.DirIcon"
-else
-  echo "nixalarm: warning: preferences-system-time icon not found under /usr/share/icons" >&2
-fi
+cp "$appdir/usr/share/icons/hicolor/scalable/apps/nixalarm.svg" "$appdir/nixalarm.svg"
+cp "$appdir/usr/share/icons/hicolor/scalable/apps/nixalarm.svg" "$appdir/.DirIcon"
 
 mkdir -p "$out_dir"
 appimage_arch="${ARCH:-x86_64}"
