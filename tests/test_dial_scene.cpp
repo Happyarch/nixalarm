@@ -83,10 +83,13 @@ void test_long_shadows_are_clipped_not_dropped() {
   PlateFrame frame = substyle_aligned_plate_frame(kLat, orientation.slant_deg, orientation.declination_deg);
   DialScene scene = build_dial_scene(kLat, orientation, kDefaultGnomonLength, kDefaultPlateRadius, false);
 
+  // Same construction declination the scene lays its lines out for -- the
+  // observer's summer solstice, not the equinox.
+  const double kDecl = construction_declination_deg(kLat);
   size_t expected = 0, overrunning = 0;
   for (double h = -165.0; h <= 165.0; h += 15.0) {
-    if (idealized_light_direction_world(kLat, h, false).z <= 0.0) continue;
-    ShadowSample s = shadow_point_on_plate(kLat, frame, kDefaultGnomonLength, h, false);
+    if (idealized_light_direction_world(kLat, h, false, kDecl).z <= 0.0) continue;
+    ShadowSample s = shadow_point_on_plate(kLat, frame, kDefaultGnomonLength, h, false, kDecl);
     if (!s.valid) continue;
     double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
     if (len < 1e-9) continue;

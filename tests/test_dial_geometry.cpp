@@ -65,6 +65,39 @@ void test_horizontal_closed_form_regression() {
   }
 }
 
+// The whole justification for laying hour lines out at the solstice rather
+// than the equinox: because the style is polar-aligned, declination slides the
+// shadow ALONG its hour line but never off it, so choosing a construction
+// declination changes only WHICH hours exist, never where any of them points.
+// If this ever stops holding, the dial is silently mis-marked at every hour.
+void test_hour_line_direction_is_declination_invariant() {
+  double worst = 0.0;
+  for (double lat : {-45.0, -10.0, 0.0, 23.0, 35.89, 60.0}) {
+    DialOrientation o = optimize_dial_orientation(lat, kDefaultGnomonLength, kDefaultPlateRadius,
+                                                    kDefaultLegibleRatio, false);
+    PlateFrame frame = substyle_aligned_plate_frame(lat, o.slant_deg, o.declination_deg);
+    for (double h = -75.0; h <= 75.0; h += 15.0) {
+      ShadowSample a = shadow_point_on_plate(lat, frame, kDefaultGnomonLength, h, false, 0.0);
+      ShadowSample b = shadow_point_on_plate(lat, frame, kDefaultGnomonLength, h, false, kObliquityDeg);
+      if (!a.valid || !b.valid) continue;
+      double la = std::sqrt(a.point_local.x * a.point_local.x + a.point_local.y * a.point_local.y);
+      double lb = std::sqrt(b.point_local.x * b.point_local.x + b.point_local.y * b.point_local.y);
+      if (la < 1e-9 || lb < 1e-9) continue;
+      // Cross product of the two unit directions: zero iff they are parallel.
+      double cross = (a.point_local.x / la) * (b.point_local.y / lb) - (a.point_local.y / la) * (b.point_local.x / lb);
+      worst = std::max(worst, std::fabs(cross));
+    }
+  }
+  expect_true(worst < 1e-12, "hour line direction is identical at equinox and solstice (polar style)");
+}
+
+// The construction declination is the observer's OWN summer solstice, so the
+// dial is built for its longest day in either hemisphere.
+void test_construction_declination_follows_the_hemisphere() {
+  expect_near(construction_declination_deg(35.89), kObliquityDeg, 1e-12, "northern dials build to +23.44");
+  expect_near(construction_declination_deg(-33.9), -kObliquityDeg, 1e-12, "southern dials build to -23.44");
+}
+
 void test_astro_sanity() {
   // 2026-03-20 ~ near equinox (UTC): Sun's declination should be close to 0.
   std::tm tm{};
@@ -225,6 +258,8 @@ void test_substyle_aligned_frame() {
 
 int main() {
   test_horizontal_closed_form_regression();
+  test_hour_line_direction_is_declination_invariant();
+  test_construction_declination_follows_the_hemisphere();
   test_astro_sanity();
   test_style_vector_matches_latitude();
   test_plate_frame_degenerate_at_slant_zero();

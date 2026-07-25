@@ -46,8 +46,8 @@ Vec2 hour_line_direction_impl(double latitude_deg, Vec3 style_w, const PlateFram
 
 ShadowSample shadow_point_impl(double /*latitude_deg*/, Vec3 style_w, const PlateFrame& frame,
                                 double gnomon_length, double hour_angle_deg, double lat_for_light,
-                                bool moondial) {
-  Vec3 light_w = idealized_light_direction_world(lat_for_light, hour_angle_deg, moondial);
+                                bool moondial, double declination_deg = 0.0) {
+  Vec3 light_w = idealized_light_direction_world(lat_for_light, hour_angle_deg, moondial, declination_deg);
   Vec3 style_local = project_to_local(style_w, frame);
   if (style_local.z <= 0.0) return ShadowSample{Vec2{0.0, 0.0}, false};
   Vec3 style_tip_local = style_local * gnomon_length;
@@ -94,11 +94,19 @@ ObjectiveResult evaluate_objective(double latitude_deg, double slant_deg, double
   std::array<bool, kHourSamples> valid{};
   std::array<double, kHourSamples> shadow_ratio{};
 
+  // Judged against the SAME construction declination the hour lines are laid
+  // out for (the observer's summer solstice). Optimizing the plate's tilt for
+  // the equinox and then drawing solstice hour lines would pick a tilt whose
+  // own plane cuts off the very early and late hours the lines were added
+  // for -- the two have to agree about what day the dial is built for.
+  double construction_decl = construction_declination_deg(latitude_deg);
+
   for (int i = 0; i < kHourSamples; ++i) {
     double h = -180.0 + i * kHourStepDeg;
-    Vec3 light_w = idealized_light_direction_world(latitude_deg, h, moondial);
+    Vec3 light_w = idealized_light_direction_world(latitude_deg, h, moondial, construction_decl);
     bool above_horizon = light_w.z > 0.0;
-    ShadowSample s = shadow_point_impl(latitude_deg, style_w, frame, gnomon_length, h, latitude_deg, moondial);
+    ShadowSample s = shadow_point_impl(latitude_deg, style_w, frame, gnomon_length, h, latitude_deg, moondial,
+                                        construction_decl);
     double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
     bool ok = above_horizon && s.valid && (len <= plate_radius) && (len <= legible_radius);
     valid[i] = ok;
@@ -274,11 +282,16 @@ Vec3 project_to_local(Vec3 world_vec, const PlateFrame& frame) {
   return Vec3{dot(world_vec, frame.u), dot(world_vec, frame.v), dot(world_vec, frame.n)};
 }
 
-Vec3 idealized_light_direction_world(double latitude_deg, double hour_angle_deg, bool moondial) {
+Vec3 idealized_light_direction_world(double latitude_deg, double hour_angle_deg, bool moondial,
+                                      double declination_deg) {
   double h = moondial ? hour_angle_deg + 180.0 : hour_angle_deg;
-  EquatorialCoord eq{0.0, 0.0};  // equinox construction sun: dec=0, ra=0 (reference meridian)
+  EquatorialCoord eq{0.0, declination_deg};  // construction light: ra=0 (reference meridian)
   double lst_hours = h / 15.0;  // hour_angle = lst*15 - ra = lst*15 since ra=0
   return az_alt_to_world(equatorial_to_horizontal(eq, latitude_deg, lst_hours));
+}
+
+double construction_declination_deg(double latitude_deg) {
+  return latitude_deg >= 0.0 ? kObliquityDeg : -kObliquityDeg;
 }
 
 Vec3 horizontal_to_world(HorizontalCoord hc) { return az_alt_to_world(hc); }
@@ -297,9 +310,10 @@ ShadowSample shadow_point_on_plate(double latitude_deg, double slant_deg, double
 }
 
 ShadowSample shadow_point_on_plate(double latitude_deg, const PlateFrame& frame, double gnomon_length,
-                                     double hour_angle_deg, bool moondial) {
+                                     double hour_angle_deg, bool moondial, double declination_deg) {
   Vec3 style_w = style_vector_world(latitude_deg);
-  return shadow_point_impl(latitude_deg, style_w, frame, gnomon_length, hour_angle_deg, latitude_deg, moondial);
+  return shadow_point_impl(latitude_deg, style_w, frame, gnomon_length, hour_angle_deg, latitude_deg, moondial,
+                            declination_deg);
 }
 
 DialOrientation optimize_dial_orientation(double latitude_deg, double gnomon_length,

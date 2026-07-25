@@ -77,14 +77,31 @@ Vec3 style_vector_world(double latitude_deg);
 Vec3 project_to_local(Vec3 world_vec, const PlateFrame& frame);
 
 // The idealized "construction sun" direction (world frame) used to build the
-// FIXED groove geometry: equinox declination (delta=0), given mean hour angle
+// FIXED groove geometry, at declination `declination_deg` and mean hour angle
 // H (moondial: phase-shifted 180 deg, since a full/opposition moon transits
-// the meridian at local midnight, behaving like a delta=0 "anti-sun" 12h out
-// of phase). This is NOT the live/true sun or moon position -- it reuses
+// the meridian at local midnight, behaving like an "anti-sun" 12h out of
+// phase). This is NOT the live/true sun or moon position -- it reuses
 // equatorial_to_horizontal (astro.h) purely as a coordinate-transform
 // primitive (ra=0, lst=H/15h), not as a date-dependent ephemeris call, so the
 // fixed-groove construction and the live shadow render share one transform.
-Vec3 idealized_light_direction_world(double latitude_deg, double hour_angle_deg, bool moondial);
+//
+// The default delta=0 is the equinox, the mean day and the reference case the
+// closed-form hour-angle identities are stated against.
+Vec3 idealized_light_direction_world(double latitude_deg, double hour_angle_deg, bool moondial,
+                                      double declination_deg = 0.0);
+
+// Earth's axial tilt: the extreme solar declination, reached at the solstices.
+constexpr double kObliquityDeg = 23.44;
+
+// The declination a dial's HOUR LINES are laid out for: the observer's own
+// summer solstice, north or south. That is the longest day, so it is the full
+// set of hours the light can ever be up for -- lay the lines out for any
+// lesser declination and the dial is permanently missing its earliest and
+// latest hours. Note this affects only WHICH hours get a line, never where a
+// line points: the style is polar-aligned (style_vector_world), so the plane
+// containing the style and the light cuts the plate along the same direction
+// whatever the declination.
+double construction_declination_deg(double latitude_deg);
 
 // Converts a horizontal (az/alt) coordinate to a unit world-space direction
 // vector (Z-up, X-north, Y-east). Exposed so callers can turn astro.h's live
@@ -116,7 +133,7 @@ ShadowSample shadow_point_on_plate(double latitude_deg, double slant_deg, double
 // slant/declination -- so mesh generation can keep its shadow-derived tick
 // directions in the same frame its gnomon geometry uses.
 ShadowSample shadow_point_on_plate(double latitude_deg, const PlateFrame& frame, double gnomon_length,
-                                    double hour_angle_deg, bool moondial);
+                                    double hour_angle_deg, bool moondial, double declination_deg = 0.0);
 
 struct DialOrientation {
   double slant_deg = 0.0;

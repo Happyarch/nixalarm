@@ -57,10 +57,16 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
   double tick_r = plate_radius * kTickRodRadiusRatio;
   double r_inner = plate_radius * kTickInnerRadiusRatio;
   double r_outer = plate_radius * kTickOuterRadiusRatio;
+  // Hour lines are laid out for the observer's SUMMER SOLSTICE, the longest
+  // day: that is every hour the light can ever be up for, and a dial built to
+  // any lesser declination is permanently missing its earliest and latest
+  // hours. It costs nothing in accuracy -- the style is polar-aligned, so
+  // declination moves the shadow along its hour line but never off it.
+  double construction_decl = construction_declination_deg(latitude_deg);
   for (double h = -165.0; h <= 165.0; h += 15.0) {
-    Vec3 light_w = idealized_light_direction_world(latitude_deg, h, moondial);
+    Vec3 light_w = idealized_light_direction_world(latitude_deg, h, moondial, construction_decl);
     if (light_w.z <= 0.0) continue;  // sun/moon below the true horizon at this hour
-    ShadowSample s = shadow_point_on_plate(latitude_deg, frame, gnomon_length, h, moondial);
+    ShadowSample s = shadow_point_on_plate(latitude_deg, frame, gnomon_length, h, moondial, construction_decl);
     if (!s.valid) continue;
     double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
     if (len < 1e-9) continue;
