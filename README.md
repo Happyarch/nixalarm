@@ -170,6 +170,7 @@ glow = true
 show_seconds = false
 roman_numerals = false
 analog_midnight_label = "24"
+dial_time = "apparent"
 
 [sources.local_song]
 type = "file"
@@ -242,11 +243,11 @@ Built-in themes:
 - `moondial`: the same instrument built for the moon instead, and dark by day. Does not use the color overrides below.
 - `auto_dial`: both of the above as one clock — whichever dial can currently be read, crossfading from one to the other at the changeover. Does not use the color overrides below.
 
-You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting `terminal_glow`, `sinnoh_green`, or `analog`; the `nixie`, `sundial`, and `moondial` themes ignore them (`background` still fills the area around the dial for the last two).
+You can still override `background`, `segment_on`, `segment_off`, and `glow` after setting `terminal_glow`, `sinnoh_green`, or `analog`; the `nixie`, `sundial`, `moondial`, and `auto_dial` themes ignore them (`background` still fills the area around the dial for the three dial themes).
 
 For `analog`, the theme defaults to a smoothly sweeping red seconds hand; set `show_seconds = false` after `theme = "analog"` to hide only that hand. The face follows the source SVG's 12-hour Arabic dial by default; set `roman_numerals = true` to use the Roman-numeral SVG face. The hands use the same time math as the source SVG's JavaScript in native C++. A small alarm marker appears when an alarm or snooze is pending and pulses red while ringing.
 
-`sundial` and `moondial` are astronomical, not decorative: they compute the real solar or lunar position for the current instant and trace the shadow the gnomon would cast. The hour lines are laid out for your latitude's summer solstice, the longest day, so the dial carries every hour its light can ever be up for. By default a dial reads *apparent solar time*, which is not your clock: depending on where you sit in your time zone and how far the equation of time has drifted, solar noon can be an hour or more from 12:00 on your watch, and daylight saving adds another hour on top. `dial_time` in `[style]` chooses what the dial reads:
+`sundial` and `moondial` are astronomical, not decorative: they compute the real solar or lunar position for the current instant and trace the shadow the gnomon would cast. The hour lines are laid out for your latitude's summer solstice, the longest day, so the dial carries every hour its light can ever be up for, and each is labelled with its Roman numeral. The numerals are *engraved* rather than painted: they are cut into the plate as a height field the renderer reads as bump, so they fill with shadow under a low sun and flatten out near noon, as a chiselled dial does. Hour lines crowd together toward the ends of the day, so each numeral is scaled to the angular room it actually has. By default a dial reads *apparent solar time*, which is not your clock: depending on where you sit in your time zone and how far the equation of time has drifted, solar noon can be an hour or more from 12:00 on your watch, and daylight saving adds another hour on top. `dial_time` in `[style]` chooses what the dial reads:
 
 | `dial_time` | Reads | Corrects for |
 |---|---|---|

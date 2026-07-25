@@ -34,7 +34,7 @@ Optional runtime dependency, only when SDR hardware is available:
 
 - Keep the CLI Unix-like: terse flags, useful stderr errors, no hidden background services.
 - Prefer generated/rendered primitives over bundled image assets for the clock face.
-- Keep visual styles config-driven. Current themes are `terminal_glow` and `sinnoh_green`; add future styles such as nixie as themes rather than replacing defaults.
+- Keep visual styles config-driven. Current themes are `terminal_glow`, `sinnoh_green`, `nixie`, `analog`, `sundial`, `moondial` and `auto_dial`; add future styles as themes rather than replacing defaults.
 - Keep the default alarm source reliable and offline: `generated`.
 - Treat internet NOAA weather-radio mirrors as convenience audio sources, not emergency alerting.
 - Preserve the the local area presets:
