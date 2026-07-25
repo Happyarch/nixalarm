@@ -58,6 +58,10 @@ uniform vec3 uRight;
 uniform vec3 uUp;
 uniform vec3 uForward;
 uniform vec2 uHalfExtent;
+// One pixel's step in NDC, vec2(2/width, 2/height). Only the hour-line
+// coverage sampling needs it: it is what turns a sub-pixel offset into a
+// world-space offset of the orthographic ray's origin.
+uniform vec2 uPixelNdc;
 uniform vec3 uLightDir;     // unit, local frame, surface -> light
 uniform vec3 uBackground;
 // Whole-frame alpha. 1 for an ordinary frame; during the day/night changeover
@@ -119,6 +123,10 @@ const float kEps = 3e-4;
 // scales is a difference between neighboring texels, so this absorbs the
 // texel size as well as the cut depth; tune it by eye, not by arithmetic.
 const float kEngraveBump = 14.0;
+// Sub-samples per axis used to measure how much of a pixel an hour line
+// covers. 2 gives five coverage levels across an edge, which is enough for a
+// line a few pixels wide; raise it if they ever read ropey.
+const int kAaPerAxis = 2;
 
 // Capsule (sphere-capped segment a-b, radius r). Returns entry t or -1.
 float capsuleIntersect(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float r, out vec3 n) {
@@ -211,7 +219,11 @@ float plateIntersect(vec3 ro, vec3 rd, out vec3 n) {
 
 // Nearest hit over the whole scene. hitKind: 0 ground, 1 plate, 2..4 rod
 // materials offset by 2 (2=gnomon, 3=glass, 4=tick); -1 = miss.
-float traceScene(vec3 ro, vec3 rd, out vec3 n, out int hitKind, out float hitRadius) {
+//
+// skipTicks traces the scene as if the hour lines weren't there. A pixel an
+// hour line only partly covers needs that: the line is blended over it (see
+// main), and blending it over itself would defeat the whole exercise.
+float traceScene(vec3 ro, vec3 rd, out vec3 n, out int hitKind, out float hitRadius, bool skipTicks) {
   float best = kInf;
   hitKind = -1;
   hitRadius = 0.0;
@@ -233,11 +245,13 @@ float traceScene(vec3 ro, vec3 rd, out vec3 n, out int hitKind, out float hitRad
   if (tp > 0.0 && tp < best) { best = tp; n = tn; hitKind = 1; }
   for (int i = 0; i < kMaxRods; ++i) {
     if (i >= uRodCount) break;
+    int mat = int(uRodB[i].w + 0.5);
+    if (skipTicks && mat == 2) continue;
     float t = capsuleIntersect(ro, rd, uRodA[i].xyz, uRodB[i].xyz, uRodA[i].w, tn);
     if (t > 0.0 && t < best) {
       best = t;
       n = tn;
-      hitKind = 2 + int(uRodB[i].w + 0.5);
+      hitKind = 2 + mat;
       hitRadius = uRodA[i].w;
     }
   }
@@ -287,9 +301,12 @@ vec2 parallaxUv(sampler2D params, vec2 uv, vec3 n, vec3 rd, float amount) {
   return uv + view_ts * h * amount;
 }
 
-void main() {
-  vec3 ro = uEye + uRight * (vNdc.x * uHalfExtent.x) + uUp * (vNdc.y * uHalfExtent.y);
-  vec3 rd = uForward;
+// One primary ray, traced and shaded. `withTicks` false leaves the hour lines
+// out of the scene entirely; `shadedKind` reports the surface finally shaded
+// (glass is transmissive and the walk continues past it, so it never shows up
+// here), or -1 if the ray reached the background.
+vec3 shadeRay(vec3 ro, vec3 rd, bool withTicks, out int shadedKind) {
+  shadedKind = -1;
 
   // Direct light only exists while the sun/moon is above the plate's own
   // horizon; fade it in over the first few degrees to avoid a hard pop.
@@ -301,7 +318,7 @@ void main() {
     vec3 n;
     int kind;
     float radius;
-    float t = traceScene(ro, rd, n, kind, radius);
+    float t = traceScene(ro, rd, n, kind, radius, !withTicks);
     if (t < 0.0) {
       color += throughput * uBackground;
       break;
@@ -407,7 +424,62 @@ void main() {
     vec3 diffuseCol = albedo * (1.0 - 0.6 * prm.a);
     color += throughput * (diffuseCol * (uAmbientColor * prm.g + uLightColor * lit) +
                            specTint * spec * vis * daylight * uLightColor);
+    shadedKind = kind;
     break;
+  }
+  return color;
+}
+
+void main() {
+  vec3 base = uEye + uRight * (vNdc.x * uHalfExtent.x) + uUp * (vNdc.y * uHalfExtent.y);
+  vec3 rd = uForward;
+
+  // The hour lines are the thinnest thing on the plate -- a few pixels across
+  // -- and a single ray per pixel decides them yes-or-no, which stair-steps
+  // them badly. So they are the one primitive drawn by COVERAGE: shade the
+  // scene without them, work out how much of the pixel a line actually fills,
+  // and blend the line over that. Nothing else is supersampled; the rim,
+  // gnomon and shadow edges are wide enough to read cleanly as they are.
+  int behindKind;
+  vec3 behind = shadeRay(base, rd, false, behindKind);
+  // A line can only ever be seen against the plate it is set into, or against
+  // the gnomon where it passes the rod's base. Over grass or sky there is
+  // nothing to antialias, so don't pay for the coverage samples there.
+  if (behindKind != 1 && behindKind != 2) {
+    FragColor = vec4(behind, uOpacity);
+    return;
+  }
+
+  float cov = 0.0;
+  vec3 lineRo = base;
+  for (int y = 0; y < kAaPerAxis; ++y) {
+    for (int x = 0; x < kAaPerAxis; ++x) {
+      // N-rooks: each row's column offset is sheared by 1/N of a cell, so no
+      // two samples share an x or a y. A plain ordered grid puts N samples on
+      // one scanline and does nothing for a near-horizontal edge, which is
+      // exactly what the lines at III and IX are.
+      float n = float(kAaPerAxis);
+      float sy = (float(y) + 0.5) / n - 0.5;
+      float sx = (float(x) + (float(y) + 0.5) / n) / n - 0.5;
+      vec3 ro = base + uRight * (sx * uPixelNdc.x * uHalfExtent.x) +
+                       uUp * (sy * uPixelNdc.y * uHalfExtent.y);
+      // Geometry only -- no maps, no shadow ray. Of the samples that land on
+      // a line, exactly one is ever shaded.
+      vec3 sn;
+      int kind;
+      float radius;
+      if (traceScene(ro, rd, sn, kind, radius, false) > 0.0 && kind == 4) {
+        cov += 1.0;
+        lineRo = ro;
+      }
+    }
+  }
+  cov /= float(kAaPerAxis * kAaPerAxis);
+
+  vec3 color = behind;
+  if (cov > 0.0) {
+    int lineKind;
+    color = mix(behind, shadeRay(lineRo, rd, true, lineKind), cov);
   }
   FragColor = vec4(color, uOpacity);
 }
@@ -530,6 +602,7 @@ void DialGlRenderer::ensure_initialized(SDL_Window* win) {
   uniform_up_ = glGetUniformLocation(program_, "uUp");
   uniform_forward_ = glGetUniformLocation(program_, "uForward");
   uniform_half_extent_ = glGetUniformLocation(program_, "uHalfExtent");
+  uniform_pixel_ndc_ = glGetUniformLocation(program_, "uPixelNdc");
   uniform_light_dir_ = glGetUniformLocation(program_, "uLightDir");
   uniform_background_ = glGetUniformLocation(program_, "uBackground");
   uniform_opacity_ = glGetUniformLocation(program_, "uOpacity");
@@ -662,6 +735,10 @@ void DialGlRenderer::draw(const DialScene& scene, const FixedCameraOffset& camer
   set3(uniform_up_, up);
   set3(uniform_forward_, forward);
   glUniform2f(uniform_half_extent_, half_w, half_h);
+  // Pixel size in NDC, for the hour lines' coverage sampling. Per draw, not
+  // per program: the window resizes, and a crossfade frame draws twice.
+  glUniform2f(uniform_pixel_ndc_, ww > 0 ? 2.0f / static_cast<float>(ww) : 0.0f,
+              wh > 0 ? 2.0f / static_cast<float>(wh) : 0.0f);
   set3(uniform_light_dir_, normalize(light_dir_local));
   set3(uniform_background_, background_color);
   glUniform1f(uniform_opacity_, opacity);

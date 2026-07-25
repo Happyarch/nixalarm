@@ -110,7 +110,7 @@ class DialGlRenderer {
   };
   std::vector<EngravingSlot> engraving_slots_;
   int uniform_eye_ = -1, uniform_right_ = -1, uniform_up_ = -1, uniform_forward_ = -1;
-  int uniform_half_extent_ = -1;
+  int uniform_half_extent_ = -1, uniform_pixel_ndc_ = -1;
   int uniform_light_dir_ = -1;
   int uniform_background_ = -1;
   int uniform_opacity_ = -1;
