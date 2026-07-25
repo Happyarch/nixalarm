@@ -2,6 +2,7 @@
 // minimal-dependency test style (see tests/test_dial_geometry.cpp).
 
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -76,19 +77,32 @@ void test_marks_accompany_ticks() {
   }
 }
 
-// The numerals sit in the annulus between the tick ends and the rim; if a
-// numeral overlapped its own hour line the engraving would read as damage.
-void test_numerals_clear_the_hour_lines() {
-  DialScene scene = build_test_scene(false);
-  double furthest_tick = 0.0;
-  for (const SceneRod& r : scene.rods) {
-    if (r.material != DialMaterial::Tick) continue;
-    for (const Vec3& p : {r.a, r.b}) furthest_tick = std::max(furthest_tick, std::sqrt(p.x * p.x + p.y * p.y));
+// The boundary chords run rim to rim and cross each other, so a numeral can no
+// longer be "past the end" of them -- it sits in the wedge that opens outward
+// between two crossing chords. What still has to hold is that no numeral is
+// struck THROUGH by a chord, which would read as damage to the lettering.
+void test_numerals_are_not_struck_through_by_a_boundary() {
+  for (bool moondial : {false, true}) {
+    DialScene scene = build_test_scene(moondial);
+    bool all_clear = true;
+    for (const HourMark& m : scene.hour_marks) {
+      double cx = m.direction.x * m.radius, cy = m.direction.y * m.radius;
+      for (const SceneRod& r : scene.rods) {
+        if (r.material != DialMaterial::Tick) continue;
+        // Distance from the numeral's centre to the chord segment.
+        double dx = r.b.x - r.a.x, dy = r.b.y - r.a.y;
+        double len2 = dx * dx + dy * dy;
+        double t = len2 > 1e-18 ? ((cx - r.a.x) * dx + (cy - r.a.y) * dy) / len2 : 0.0;
+        t = std::max(0.0, std::min(1.0, t));
+        double px = r.a.x + t * dx - cx, py = r.a.y + t * dy - cy;
+        // Half the cap height is the closest a chord may come before it starts
+        // cutting across the glyph body.
+        if (std::sqrt(px * px + py * py) < 0.5 * m.height) all_clear = false;
+      }
+    }
+    expect_true(all_clear, moondial ? "no moon dial numeral is struck through by a boundary chord"
+                                     : "no sun dial numeral is struck through by a boundary chord");
   }
-  bool clear = true;
-  for (const HourMark& m : scene.hour_marks)
-    if (m.radius - 0.5 * m.height < furthest_tick) clear = false;
-  expect_true(clear, "numerals start beyond the end of the hour lines");
 }
 
 void test_engraving_cuts_where_the_numerals_are() {
@@ -150,7 +164,7 @@ void test_empty_scene_is_blank_not_empty() {
 int main() {
   test_roman_numerals();
   test_marks_accompany_ticks();
-  test_numerals_clear_the_hour_lines();
+  test_numerals_are_not_struck_through_by_a_boundary();
   test_engraving_cuts_where_the_numerals_are();
   test_empty_scene_is_blank_not_empty();
   if (g_failures > 0) {

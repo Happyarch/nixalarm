@@ -100,20 +100,29 @@ void test_long_shadows_are_clipped_not_dropped() {
   expect_true(scene.hour_marks.size() == expected, "every hour with a usable light direction gets a mark");
 
   // The drawn lines are the dial's structure -- the boundaries between hour
-  // bands -- not an indication of where any shadow reached, so they span the
-  // whole reading annulus evenly and stay on the stone.
-  double shortest = 1e9, longest = 0.0, innermost = 1e9;
+  // bands -- not an indication of where any shadow reached. Each is a secant
+  // of the plate: it runs rim to rim, and it clears the gnomon foot by exactly
+  // the tangent circle's radius.
+  double shortest_reach = 1e9, longest_reach = 0.0;
+  double closest_approach = 1e9, furthest_approach = 0.0;
   for (const SceneRod& t : scene.rods) {
     if (t.material != DialMaterial::Tick) continue;
-    double end = std::sqrt(t.b.x * t.b.x + t.b.y * t.b.y);
-    double start = std::sqrt(t.a.x * t.a.x + t.a.y * t.a.y);
-    shortest = std::min(shortest, end);
-    longest = std::max(longest, end);
-    innermost = std::min(innermost, start);
+    for (const Vec3& p : {t.a, t.b}) {
+      double r = std::sqrt(p.x * p.x + p.y * p.y);
+      shortest_reach = std::min(shortest_reach, r);
+      longest_reach = std::max(longest_reach, r);
+    }
+    // Distance from the dial centre to the chord's line: |(b-a) x (-a)| / |b-a|.
+    double dx = t.b.x - t.a.x, dy = t.b.y - t.a.y;
+    double approach = std::fabs(dx * (-t.a.y) - dy * (-t.a.x)) / std::sqrt(dx * dx + dy * dy);
+    closest_approach = std::min(closest_approach, approach);
+    furthest_approach = std::max(furthest_approach, approach);
   }
-  expect_true(longest - shortest < 1e-9, "band boundaries are all the same length, so the bands read evenly");
-  expect_true(longest <= scene.plate_radius, "boundaries stay on the plate");
-  expect_true(innermost > 0.0, "boundaries stop short of the gnomon foot, leaving it clear");
+  expect_near(shortest_reach, scene.plate_radius, 1e-9, "every boundary reaches the rim at one end");
+  expect_near(longest_reach, scene.plate_radius, 1e-9, "and at the other -- they are secants, rim to rim");
+  expect_true(closest_approach > 0.0, "no boundary passes through the gnomon foot");
+  expect_near(furthest_approach, closest_approach, 1e-9,
+              "all boundaries are tangent to one circle, which is what makes them cross into a rosette");
 }
 
 // The dial is read as bands: the lines are boundaries at the half hours and
@@ -124,10 +133,14 @@ void test_numerals_sit_between_the_boundary_lines() {
   for (bool moondial : {false, true}) {
     DialScene scene = build_test_scene(moondial);
 
+    // A boundary chord's DIRECTION is the angle of its midpoint -- the point
+    // where it touches the inner circle. Its endpoints are out on the rim in
+    // two entirely different directions, so reading the angle off an endpoint
+    // would make this test pass without checking anything.
     std::vector<double> boundaries;
     for (const SceneRod& t : scene.rods) {
       if (t.material != DialMaterial::Tick) continue;
-      boundaries.push_back(std::atan2(t.b.y, t.b.x));
+      boundaries.push_back(std::atan2(0.5 * (t.a.y + t.b.y), 0.5 * (t.a.x + t.b.x)));
     }
     expect_true(boundaries.size() >= 2, "the dial has boundary lines to sit between");
 

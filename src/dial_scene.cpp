@@ -7,11 +7,11 @@ namespace {
 
 constexpr double kGnomonRodRadiusRatio = 0.035;  // relative to gnomon_length
 constexpr double kGlassLegRadiusRatio = 0.012;   // relative to gnomon_length; ~1/3 of the rod
-constexpr double kTickRodRadiusRatio = 0.010;    // relative to plate_radius
+constexpr double kTickRodRadiusRatio = 0.010;  // relative to plate_radius
+// The circle every hour-boundary chord is tangent to. It sets how far the
+// chords stand off the gnomon foot, and so how wide the cleared ring at the
+// middle of the dial is; the chords cross each other just outside it.
 constexpr double kTickInnerRadiusRatio = 0.22;
-// The hour lines stop short of the rim to leave an annulus for the engraved
-// numerals, which sit centered in the gap between the tick ends and the edge.
-constexpr double kTickOuterRadiusRatio = 0.80;
 constexpr double kNumeralRadiusRatio = 0.885;
 constexpr double kNumeralHeightRatio = 0.105;
 constexpr double kPi = 3.14159265358979323846;
@@ -57,7 +57,6 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
 
   double tick_r = plate_radius * kTickRodRadiusRatio;
   double r_inner = plate_radius * kTickInnerRadiusRatio;
-  double r_outer = plate_radius * kTickOuterRadiusRatio;
   // Hour lines are laid out for the observer's SUMMER SOLSTICE, the longest
   // day: that is every hour the light can ever be up for, and a dial built to
   // any lesser declination is permanently missing its earliest and latest
@@ -125,12 +124,6 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
     while (hours[i].plate_angle - hours[i - 1].plate_angle < -kPi) hours[i].plate_angle += 2.0 * kPi;
   }
 
-  for (const HourEntry& e : hours) {
-    Vec2 dir{std::cos(e.plate_angle), std::sin(e.plate_angle)};
-    scene.hour_marks.push_back(HourMark{dir, plate_radius * kNumeralRadiusRatio,
-                                         plate_radius * kNumeralHeightRatio, e.hour});
-  }
-
   // Boundaries fall at the half hours, one more of them than there are hours,
   // so every band is closed on both sides.
   //
@@ -161,18 +154,68 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
   bounds.front() = hours.front().plate_angle - first_half_width;
   bounds.back() = hours.back().plate_angle + last_half_width;
 
-  // Each boundary spans the reading annulus, from the inner circle out to the
-  // rim, cutting the plate rather than converging on the gnomon foot -- the
-  // foot is left clear for the shadow to sweep. Boundaries run the full width
-  // of the annulus however far the shadow reaches at that hour: they are the
-  // dial's structure, not an indication of anything, and even bands read
-  // better than ragged ones.
+  // Each boundary is drawn as a SECANT of the plate: a straight chord running
+  // rim to rim, tangent to the inner circle at the point its own half-hour
+  // direction crosses it, rather than a spoke converging on the gnomon foot.
+  //
+  // Two consequences, both intended. The chords all touch one circle, so they
+  // cross their neighbours a little outside it and weave into a rosette, and
+  // that shared tangent circle reads as a ring around the cleared foot. And
+  // because adjacent chords cross exactly on the hour ray between them, the
+  // wedge that opens outward from each crossing IS that hour's band -- which
+  // is where its numeral sits, out near the rim.
+  // Each numeral goes at the point on its own hour ray that stands clearest of
+  // every chord.
+  //
+  // Rim-to-rim chords cross that ray in a lot of places -- not just the two
+  // that fence its band, but every boundary within about 77 degrees of it --
+  // so a numeral pinned to one fixed radius gets struck through by whichever
+  // chord passes there, and struck-through lettering reads as damage. The
+  // clearance has to be measured PERPENDICULAR to each chord rather than along
+  // the ray: a chord that crosses the ray far away can still run nearly
+  // parallel to it and pass close by. For a point at radius r on the ray at
+  // angle a, its distance to the chord tangent at angle b is exactly
+  // |r*cos(a - b) - r_inner|, so sweeping r and keeping the best worst-case is
+  // both cheap and exact.
+  //
+  // The price is that the numerals no longer sit on one tidy circle. That is
+  // what chords which cross cost, and legible lettering is worth more.
+  const double numeral_min_radius = 1.15 * r_inner;  // clear of the crowded crossings around the ring
+  // Far enough in that a full-height numeral centred here still has its cap
+  // line on the stone rather than hanging over the rim.
+  const double numeral_max_radius = plate_radius * (1.0 - 0.5 * kNumeralHeightRatio);
+  constexpr int kRadiusSamples = 240;
+  for (const HourEntry& e : hours) {
+    double best_radius = numeral_min_radius, best_clearance = -1.0;
+    for (int i = 0; i <= kRadiusSamples; ++i) {
+      double r = numeral_min_radius +
+                 (numeral_max_radius - numeral_min_radius) * (static_cast<double>(i) / kRadiusSamples);
+      double clearance = 1e9;
+      for (double b : bounds) {
+        clearance = std::min(clearance, std::fabs(r * std::cos(e.plate_angle - b) - r_inner));
+      }
+      if (clearance > best_clearance) {
+        best_clearance = clearance;
+        best_radius = r;
+      }
+    }
+    // The glyphs are drawn about their own centre, so the cap height that fits
+    // is twice the clearance, less a margin so the lettering does not touch.
+    double height = std::min(plate_radius * kNumeralHeightRatio, 1.5 * best_clearance);
+    Vec2 dir{std::cos(e.plate_angle), std::sin(e.plate_angle)};
+    scene.hour_marks.push_back(HourMark{dir, best_radius, height, e.hour});
+  }
+
+  double chord_reach = std::sqrt(std::max(0.0, plate_radius * plate_radius - r_inner * r_inner));
   for (double angle : bounds) {
     Vec2 dir{std::cos(angle), std::sin(angle)};
+    Vec2 along{-dir.y, dir.x};  // along the chord: perpendicular to its own half-hour direction
+    Vec2 touch{dir.x * r_inner, dir.y * r_inner};
     // Centered on the plate surface, so half the capsule stands proud of it
     // as a raised ridge the tracer can shade and shadow like everything else.
-    scene.rods.push_back(SceneRod{Vec3{dir.x * r_inner, dir.y * r_inner, 0.0},
-                                   Vec3{dir.x * r_outer, dir.y * r_outer, 0.0}, tick_r, DialMaterial::Tick});
+    scene.rods.push_back(SceneRod{Vec3{touch.x - along.x * chord_reach, touch.y - along.y * chord_reach, 0.0},
+                                   Vec3{touch.x + along.x * chord_reach, touch.y + along.y * chord_reach, 0.0},
+                                   tick_r, DialMaterial::Tick});
   }
 
   return scene;
