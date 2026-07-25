@@ -99,17 +99,60 @@ void test_long_shadows_are_clipped_not_dropped() {
   expect_true(overrunning > 0, "this latitude really does have hours whose shadow overruns the plate");
   expect_true(scene.hour_marks.size() == expected, "every hour with a usable light direction gets a mark");
 
-  // Clipping is what makes that possible, so the lines must differ in length:
-  // shortest around noon, running to the rim early and late.
-  double shortest = 1e9, longest = 0.0;
+  // The drawn lines are the dial's structure -- the boundaries between hour
+  // bands -- not an indication of where any shadow reached, so they span the
+  // whole reading annulus evenly and stay on the stone.
+  double shortest = 1e9, longest = 0.0, innermost = 1e9;
   for (const SceneRod& t : scene.rods) {
     if (t.material != DialMaterial::Tick) continue;
     double end = std::sqrt(t.b.x * t.b.x + t.b.y * t.b.y);
+    double start = std::sqrt(t.a.x * t.a.x + t.a.y * t.a.y);
     shortest = std::min(shortest, end);
     longest = std::max(longest, end);
+    innermost = std::min(innermost, start);
   }
-  expect_true(longest > shortest + 1e-6, "hour lines vary in length rather than all reaching the same radius");
-  expect_true(longest <= scene.plate_radius, "the longest hour line is still clipped to the plate");
+  expect_true(longest - shortest < 1e-9, "band boundaries are all the same length, so the bands read evenly");
+  expect_true(longest <= scene.plate_radius, "boundaries stay on the plate");
+  expect_true(innermost > 0.0, "boundaries stop short of the gnomon foot, leaving it clear");
+}
+
+// The dial is read as bands: the lines are boundaries at the half hours and
+// each numeral sits in the middle of the band between two of them. A numeral
+// sitting ON a line would be ambiguous -- it is the whole point of the layout
+// that it does not.
+void test_numerals_sit_between_the_boundary_lines() {
+  for (bool moondial : {false, true}) {
+    DialScene scene = build_test_scene(moondial);
+
+    std::vector<double> boundaries;
+    for (const SceneRod& t : scene.rods) {
+      if (t.material != DialMaterial::Tick) continue;
+      boundaries.push_back(std::atan2(t.b.y, t.b.x));
+    }
+    expect_true(boundaries.size() >= 2, "the dial has boundary lines to sit between");
+
+    bool all_between = true, none_on_a_line = true;
+    for (const HourMark& m : scene.hour_marks) {
+      double angle = std::atan2(m.direction.y, m.direction.x);
+      bool has_before = false, has_after = false;
+      double closest = 1e9;
+      for (double b : boundaries) {
+        double delta = angle - b;
+        while (delta > 3.14159265358979323846) delta -= 2.0 * 3.14159265358979323846;
+        while (delta < -3.14159265358979323846) delta += 2.0 * 3.14159265358979323846;
+        if (delta > 0.0) has_after = true;
+        if (delta < 0.0) has_before = true;
+        closest = std::min(closest, std::fabs(delta));
+      }
+      if (!has_before || !has_after) all_between = false;
+      // Half an hour of arc is 7.5 degrees of hour angle; on the plate the
+      // bands are uneven, so just insist the numeral is clearly off the line.
+      if (closest < 0.5 * 3.14159265358979323846 / 180.0) none_on_a_line = false;
+    }
+    expect_true(all_between, moondial ? "every moon dial numeral has a boundary on each side"
+                                       : "every sun dial numeral has a boundary on each side");
+    expect_true(none_on_a_line, "no numeral sits on top of a boundary line");
+  }
 }
 
 // The dial faces change over from sun to moon when the current dial stops
@@ -195,6 +238,7 @@ int main() {
   test_gnomon_rod_and_glass_frame_form_right_triangle();
   test_moondial_also_produces_scene();
   test_long_shadows_are_clipped_not_dropped();
+  test_numerals_sit_between_the_boundary_lines();
   test_readability_follows_the_shadow_off_the_plate();
 
   if (g_failures > 0) {

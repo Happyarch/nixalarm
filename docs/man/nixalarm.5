@@ -143,11 +143,13 @@ sun actually casts at the configured
 .B latitude
 and
 .BR longitude .
-The plate tilt and hour-line spacing are optimized for that latitude at
-startup, and the hour lines are laid out for that latitude's summer solstice
-so the dial carries every hour its light can ever be up for. Each line is
-labelled with its Roman numeral, engraved into the plate as relief rather than
-painted on, so the lettering fills with shadow under a low sun. A dial reads
+The plate tilt and hour spacing are optimized for that latitude at startup, and
+the dial is laid out for that latitude's summer solstice so it carries every
+hour its light can ever be up for. It is read as hour BANDS: the engraved lines
+are the boundaries between hours, drawn at the half hours, and each hour's
+Roman numeral sits in the middle of its own band, so the hour is named by which
+band the shadow lies in. The numerals are engraved into the plate as relief
+rather than painted on, so the lettering fills with shadow under a low sun. A dial reads
 apparent solar time, which is not clock time: solar noon can be an hour or
 more from 12:00 on your watch depending on your position within the time
 zone, the equation of time, and daylight saving. Requires OpenGL 3.3. Does not use the color overrides below apart
