@@ -187,12 +187,12 @@ url = "https://example.org/your-stream"
 
 [sources.weatherband]
 type = "sdr_weatherband"
-frequency_mhz = 162.425
+frequency_mhz = 162.400
 device_index = 0
 gain = "auto"
 ```
 
-A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. The frequency above is an arbitrary example, not a recommendation: set `frequency_mhz` to whichever NOAA transmitter actually covers you. The seven US weather-band channels run 162.400 to 162.550 MHz in 25 kHz steps.
+A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. Set `frequency_mhz` to the NOAA channel covering your area; the seven US channels run 162.400 to 162.550 MHz in 25 kHz steps.
 
 ## Built-in sources
 
@@ -204,7 +204,7 @@ There are no presets for particular transmitters or regions: which weather-band 
 With RTL-SDR hardware, pick your channel:
 
 ```sh
-./build/nixalarm --source weatherband_162_425 07:30
+./build/nixalarm --source weatherband_162_400 07:30
 ```
 
 Without SDR hardware, an internet mirror of your local station works as a `type = "internet"` source in your config:

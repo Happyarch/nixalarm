@@ -136,10 +136,10 @@ network, or SDR hardware.
 .B weatherband_162_525
 .TQ
 .B weatherband_162_550
-RTL-SDR presets, one per US NOAA weather-band channel. There are no presets
-for particular transmitters or regions: which channel reaches you depends on
-where you are, so choose the one for your own area. For a station without SDR
-hardware, add an internet mirror of it to the config as a
+RTL-SDR presets, one per US NOAA weather-band channel. Coverage is
+location-dependent, so there are no presets for particular transmitters;
+choose the channel for the local area. For a station without SDR hardware, add
+an internet mirror of it to the config as a
 .B [sources.NAME]
 of type
 .BR internet .
@@ -152,7 +152,7 @@ nixalarm 07:30
 .TP
 Use an RTL-SDR weather-band channel:
 .EX
-nixalarm --source weatherband_162_425 07:30
+nixalarm --source weatherband_162_400 07:30
 .EE
 .TP
 Start fullscreen with the configured default source:

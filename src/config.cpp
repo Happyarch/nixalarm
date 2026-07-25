@@ -105,6 +105,12 @@ static bool apply_theme(Config& cfg, const std::string& theme) {
   return false;
 }
 
+// US NOAA Weather Radio All Hazards band: seven channels from 162.400 MHz in
+// 25 kHz steps.
+constexpr double kWeatherBandBaseMhz = 162.400;
+constexpr double kWeatherBandStepMhz = 0.025;
+constexpr int kWeatherBandChannels = 7;
+
 static Source make_sdr(double mhz) {
   Source s;
   s.type = SourceType::SdrWeatherband;
@@ -115,10 +121,11 @@ static Source make_sdr(double mhz) {
 static std::map<std::string, Source> builtin_sources() {
   std::map<std::string, Source> m;
   m["generated"] = Source{};
-  // One preset per US NOAA weather-band channel. No transmitter-specific
-  // presets: coverage depends on the user's location. Station streams go in
-  // the config as an "internet" source.
-  for (double f : {162.400, 162.425, 162.450, 162.475, 162.500, 162.525, 162.550}) {
+  // One preset per channel. Coverage is location-dependent, so there is no
+  // preset for a specific transmitter; station streams go in the config as an
+  // "internet" source.
+  for (int i = 0; i < kWeatherBandChannels; ++i) {
+    double f = kWeatherBandBaseMhz + i * kWeatherBandStepMhz;
     std::ostringstream name;
     name << "weatherband_" << std::fixed << std::setprecision(3) << f;
     std::string key = name.str();
@@ -199,14 +206,12 @@ static std::string default_config_text() {
       "# path = \"/home/user/Music/alarm.mid\"\n"
       "# soundfont = \"/usr/share/soundfonts/default.sf2\"\n"
       "\n"
-      "# NOAA weather band off RTL-SDR hardware. The channel below is an\n"
-      "# arbitrary example, not a recommendation -- set frequency_mhz to whichever\n"
-      "# transmitter actually covers YOU. The seven US weather-band channels are\n"
-      "# 162.400 to 162.550 MHz in 25 kHz steps; `nixalarm --list-sources` shows a\n"
-      "# built-in preset for each.\n"
+      "# NOAA weather band off RTL-SDR hardware. Set frequency_mhz to the channel\n"
+      "# covering your area; the seven US channels run 162.400 to 162.550 MHz in\n"
+      "# 25 kHz steps, and --list-sources has a preset for each.\n"
       "# [sources.weatherband]\n"
       "# type = \"sdr_weatherband\"\n"
-      "# frequency_mhz = 162.425\n"
+      "# frequency_mhz = 162.400\n"
       "# device_index = 0\n"
       "# gain = \"auto\"\n";
 }
