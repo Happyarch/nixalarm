@@ -37,12 +37,7 @@ Optional runtime dependency, only when SDR hardware is available:
 - Keep visual styles config-driven. Current themes are `terminal_glow`, `sinnoh_green`, `nixie`, `analog`, `sundial`, `moondial` and `auto_dial`; add future styles as themes rather than replacing defaults.
 - Keep the default alarm source reliable and offline: `generated`.
 - Treat internet NOAA weather-radio mirrors as convenience audio sources, not emergency alerting.
-- Preserve the the local area presets:
-  - `nwr_internet_backup` for current no-SDR use.
-  - `weatherband_162_425`
-  - `weatherband_162_425`
-  - `weatherband_162_425` for future SDR use.
-  - `nwr_internet_backup`
+- Ship nothing tied to a particular place. Built-in sources are the generic `weatherband_162_*` channel presets; a specific transmitter, station URL, or set of coordinates belongs in a user's own config, never in the defaults or the docs.
 
 ## Validation
 

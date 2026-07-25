@@ -187,40 +187,33 @@ url = "https://example.org/your-stream"
 
 [sources.weatherband]
 type = "sdr_weatherband"
-frequency_mhz = 162.500
+frequency_mhz = 162.425
 device_index = 0
 gain = "auto"
 ```
 
+A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. The frequency above is an arbitrary example, not a recommendation: set `frequency_mhz` to whichever NOAA transmitter actually covers you. The seven US weather-band channels run 162.400 to 162.550 MHz in 25 kHz steps.
+
 ## Built-in sources
 
-- `generated`: procedural alarm tone.
-- `nwr_internet_backup`: practical no-SDR NOAA backup using the example NWR community mirror.
-- `nwr_internet_backup`: NOAA Weather Radio an example, 162.450 MHz internet-stream preset when the community mirror is available.
-- `weatherband_162_425`: future SDR alias for the preferred the local area-area NWR preset.
-- `weatherband_162_425`: SDR preset for NOAA Weather Radio NWR, a regional area, 162.500 MHz, serves the local area.
-- `weatherband_162_425`: alias for the same NWR SDR preset.
-- `weatherband_162_400`, `weatherband_162_425`, `weatherband_162_450`, `weatherband_162_475`, `weatherband_162_500`, `weatherband_162_525`, `weatherband_162_550`: RTL-SDR weather-band presets.
+- `generated`: procedural alarm tone. The default; needs no files, network, or hardware.
+- `weatherband_162_400`, `weatherband_162_425`, `weatherband_162_450`, `weatherband_162_475`, `weatherband_162_500`, `weatherband_162_525`, `weatherband_162_550`: RTL-SDR presets, one per US NOAA weather-band channel.
 
-Without SDR hardware, use example as the NOAA internet backup:
+There are no presets for particular transmitters or regions: which weather-band channel reaches you depends on where you are, so pick the channel for your own area. `--list-sources` prints everything available.
 
-```sh
-./build/nixalarm --source nwr_internet_backup 07:30
-```
-
-If you later add an RTL-SDR, use the preferred Jefferson-area NOAA station:
+With RTL-SDR hardware, pick your channel:
 
 ```sh
 ./build/nixalarm --source weatherband_162_425 07:30
 ```
 
-Shorter SDR alias:
+Without SDR hardware, an internet mirror of your local station works as a `type = "internet"` source in your config:
 
 ```sh
-./build/nixalarm --source weatherband_162_425 07:30
+./build/nixalarm --source my_weather_stream 07:30
 ```
 
-The internet NOAA-weather-radio URLs are community mirrors when available. NWR is configured as SDR-first because public listings do not show a reliable online stream for that transmitter. Without SDR hardware, use the example stream backup.
+Internet NOAA-weather-radio URLs are community mirrors and come and go; not every transmitter has a reliable one, which is why the built-in presets are SDR channels rather than stream URLs.
 
 ## Themes
 

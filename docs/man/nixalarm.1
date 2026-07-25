@@ -123,24 +123,6 @@ Quit.
 Procedural PCM alarm tone. This is the default and does not require files,
 network, or SDR hardware.
 .TP
-.B nwr_internet_backup
-Internet-radio backup using the an example NWR community
-mirror when available.
-.TP
-.B nwr_internet_backup
-Alias for the example NWR internet-radio preset.
-.TP
-.B weatherband_162_425
-Future SDR alias for the preferred the local area-area NWR source at
-162.500 MHz.
-.TP
-.B weatherband_162_425
-RTL-SDR preset for NOAA Weather Radio NWR in the a regional/Black
-Mountain area at 162.500 MHz.
-.TP
-.B weatherband_162_425
-Alias for the same NWR RTL-SDR preset.
-.TP
 .B weatherband_162_400
 .TQ
 .B weatherband_162_425
@@ -154,7 +136,13 @@ Alias for the same NWR RTL-SDR preset.
 .B weatherband_162_525
 .TQ
 .B weatherband_162_550
-Generic RTL-SDR weather-band presets.
+RTL-SDR presets, one per US NOAA weather-band channel. There are no presets
+for particular transmitters or regions: which channel reaches you depends on
+where you are, so choose the one for your own area. For a station without SDR
+hardware, add an internet mirror of it to the config as a
+.B [sources.NAME]
+of type
+.BR internet .
 .SH EXAMPLES
 .TP
 Run a generated alarm at 7:30 AM:
@@ -162,9 +150,9 @@ Run a generated alarm at 7:30 AM:
 nixalarm 07:30
 .EE
 .TP
-Use the the local area no-SDR internet backup:
+Use an RTL-SDR weather-band channel:
 .EX
-nixalarm --source nwr_internet_backup 07:30
+nixalarm --source weatherband_162_425 07:30
 .EE
 .TP
 Start fullscreen with the configured default source:

@@ -115,15 +115,11 @@ static Source make_sdr(double mhz) {
 static std::map<std::string, Source> builtin_sources() {
   std::map<std::string, Source> m;
   m["generated"] = Source{};
-  Source example;
-  example.type = SourceType::Internet;
-  example.url = "https://example.org/your-stream";
-  m["nwr_internet_backup"] = example;
-  m["nwr_internet_backup"] = example;
-  Source mtj = make_sdr(162.500);
-  m["weatherband_162_425"] = mtj;
-  m["weatherband_162_425"] = mtj;
-  m["weatherband_162_425"] = mtj;
+  // One preset per US NOAA weather-band channel, and nothing tied to any
+  // particular transmitter or region: which channel reaches you depends on
+  // where you are, so that is the user's to choose, not ours to assume. An
+  // internet mirror for a specific station goes in the config as a
+  // [sources.NAME] of type "internet".
   for (double f : {162.400, 162.425, 162.450, 162.475, 162.500, 162.525, 162.550}) {
     std::ostringstream name;
     name << "weatherband_" << std::fixed << std::setprecision(3) << f;
@@ -183,23 +179,38 @@ static std::string default_config_text() {
       "# and DST so the dial agrees with your wall clock.\n"
       "dial_time = \"apparent\"\n"
       "\n"
-      "# No-SDR the local area NOAA backup.\n"
-      "[sources.weather_stream]\n"
-      "type = \"internet\"\n"
-      "url = \"https://example.org/your-stream\"\n"
+      "# Extra alarm sources are yours to add -- the examples below are commented\n"
+      "# out so a fresh install stays on the offline `generated` alarm and reaches\n"
+      "# for nothing on its own. Uncomment and edit whichever you want, then set\n"
+      "# alarm_source (or pass --source NAME).\n"
       "\n"
-      "# MIDI example. Set soundfont if auto-detection does not find one.\n"
+      "# A local audio file. Anything your FFmpeg build can decode.\n"
+      "# [sources.local_song]\n"
+      "# type = \"file\"\n"
+      "# path = \"/home/user/Music/alarm.flac\"\n"
+      "\n"
+      "# An internet stream. NOAA weather-radio mirrors are one use; see\n"
+      "# nixalarm(1) for the built-in presets, or put your own URL here.\n"
+      "# [sources.weather_stream]\n"
+      "# type = \"internet\"\n"
+      "# url = \"https://example.org/your-stream\"\n"
+      "\n"
+      "# MIDI. Set soundfont if auto-detection does not find one.\n"
       "# [sources.midi_alarm]\n"
       "# type = \"midi\"\n"
       "# path = \"/home/user/Music/alarm.mid\"\n"
       "# soundfont = \"/usr/share/soundfonts/default.sf2\"\n"
       "\n"
-      "# Future RTL-SDR NWR preset, if SDR hardware is available.\n"
-      "[sources.weatherband]\n"
-      "type = \"sdr_weatherband\"\n"
-      "frequency_mhz = 162.500\n"
-      "device_index = 0\n"
-      "gain = \"auto\"\n";
+      "# NOAA weather band off RTL-SDR hardware. The channel below is an\n"
+      "# arbitrary example, not a recommendation -- set frequency_mhz to whichever\n"
+      "# transmitter actually covers YOU. The seven US weather-band channels are\n"
+      "# 162.400 to 162.550 MHz in 25 kHz steps; `nixalarm --list-sources` shows a\n"
+      "# built-in preset for each.\n"
+      "# [sources.weatherband]\n"
+      "# type = \"sdr_weatherband\"\n"
+      "# frequency_mhz = 162.425\n"
+      "# device_index = 0\n"
+      "# gain = \"auto\"\n";
 }
 
 static void seed_default_config_if_missing(const fs::path& path) {
