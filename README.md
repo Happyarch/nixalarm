@@ -4,6 +4,18 @@
 
 The visual style is intentionally simple: dark green background, bright green segment blocks, dim inactive segments, and optional glow.
 
+## Screenshots
+
+| `nixie` | `sinnoh_green` |
+|---|---|
+| ![nixie theme](docs/screenshots/nixie.jpg) | ![sinnoh_green theme](docs/screenshots/sinnoh_green.png) |
+
+| `auto_dial` (day, sundial) | `auto_dial` (night, moondial) |
+|---|---|
+| ![auto_dial theme, sundial](docs/screenshots/auto_dial_day.jpg) | ![auto_dial theme, moondial](docs/screenshots/auto_dial_night.jpg) |
+
+See [Themes](#themes) below for the full list and what each one draws.
+
 ## Build
 
 Dependencies:

@@ -9,6 +9,10 @@ appdir="${work_dir}/AppDir"
 out_dir="${project_root}/dist"
 trap 'rm -rf "$work_dir"' EXIT
 
+# Pin a portable baseline instead of inheriting the builder shell's CFLAGS/
+# CXXFLAGS (e.g. -march=native), which would SIGILL on any other CPU.
+CFLAGS="-march=x86-64-v3 -mtune=generic -O2 -pipe" \
+CXXFLAGS="-march=x86-64-v3 -mtune=generic -O2 -pipe" \
 cmake -S "$project_root" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr
