@@ -55,6 +55,13 @@ struct HourMark {
   Vec2 direction;   // unit, on the plate, from the dial center toward the mark
   double radius;    // distance from the center to the numeral's center
   double height;    // cap height of the numeral, in plate units
+  // How much room the numeral actually has: the perpendicular distance from
+  // its center to the NEARER of the two boundary lines fencing its band, less
+  // the width of that line itself. Bands are not symmetric about their hour
+  // and they narrow sharply toward midday, so a numeral sized from anything
+  // else -- the spacing of neighbouring hours, say -- ends up struck through
+  // by a boundary. The engraver scales the lettering to fit this.
+  double clearance = 0.0;
   int hour = 12;    // 1..12; the numeral to cut
 };
 

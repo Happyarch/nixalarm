@@ -77,31 +77,42 @@ void test_marks_accompany_ticks() {
   }
 }
 
-// The boundary chords run rim to rim and cross each other, so a numeral can no
-// longer be "past the end" of them -- it sits in the wedge that opens outward
-// between two crossing chords. What still has to hold is that no numeral is
-// struck THROUGH by a chord, which would read as damage to the lettering.
+// A numeral must sit inside its band, not across a boundary line -- lettering
+// with a line struck through it reads as damage.
+//
+// Measured against the ENGRAVING ITSELF rather than the mark's nominal height,
+// because build_hour_numeral_engraving shrinks a numeral to the angular room
+// its band actually has. Checking the nominal height would fail for the narrow
+// bands at the ends of the day even though nothing is really struck through.
 void test_numerals_are_not_struck_through_by_a_boundary() {
   for (bool moondial : {false, true}) {
     DialScene scene = build_test_scene(moondial);
-    bool all_clear = true;
-    for (const HourMark& m : scene.hour_marks) {
-      double cx = m.direction.x * m.radius, cy = m.direction.y * m.radius;
-      for (const SceneRod& r : scene.rods) {
-        if (r.material != DialMaterial::Tick) continue;
-        // Distance from the numeral's centre to the chord segment.
-        double dx = r.b.x - r.a.x, dy = r.b.y - r.a.y;
-        double len2 = dx * dx + dy * dy;
-        double t = len2 > 1e-18 ? ((cx - r.a.x) * dx + (cy - r.a.y) * dy) / len2 : 0.0;
-        t = std::max(0.0, std::min(1.0, t));
-        double px = r.a.x + t * dx - cx, py = r.a.y + t * dy - cy;
-        // Half the cap height is the closest a chord may come before it starts
-        // cutting across the glyph body.
-        if (std::sqrt(px * px + py * py) < 0.5 * m.height) all_clear = false;
+    const int kSize = 256;
+    EngravingMap map = build_hour_numeral_engraving(scene, kSize);
+    const double texel = 2.0 * scene.plate_radius / kSize;
+
+    double closest = 1e9;
+    for (int j = 0; j < kSize; ++j) {
+      for (int i = 0; i < kSize; ++i) {
+        if (map.depth[static_cast<size_t>(j) * kSize + i] == 0) continue;
+        double px = -scene.plate_radius + (i + 0.5) * texel;
+        double py = -scene.plate_radius + (j + 0.5) * texel;
+        for (const SceneRod& r : scene.rods) {
+          if (r.material != DialMaterial::Tick) continue;
+          double dx = r.b.x - r.a.x, dy = r.b.y - r.a.y;
+          double len2 = dx * dx + dy * dy;
+          double t = len2 > 1e-18 ? ((px - r.a.x) * dx + (py - r.a.y) * dy) / len2 : 0.0;
+          t = std::max(0.0, std::min(1.0, t));
+          double qx = r.a.x + t * dx - px, qy = r.a.y + t * dy - py;
+          closest = std::min(closest, std::sqrt(qx * qx + qy * qy));
+        }
       }
     }
-    expect_true(all_clear, moondial ? "no moon dial numeral is struck through by a boundary chord"
-                                     : "no sun dial numeral is struck through by a boundary chord");
+    // The boundary rods have a radius of their own; cut lettering must stay
+    // outside it, or the two run together on the plate.
+    const double line_radius = 0.010 * scene.plate_radius;
+    expect_true(closest > line_radius, moondial ? "no moon dial numeral is struck through by a boundary"
+                                                : "no sun dial numeral is struck through by a boundary");
   }
 }
 

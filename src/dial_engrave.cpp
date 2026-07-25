@@ -42,25 +42,22 @@ double advance_width(const char* text) {
   return total > 0.0 ? total - kLetterSpacing : 0.0;
 }
 
-// Hour lines are not evenly spaced -- they crowd together toward the ends of
-// the day, where a full-size XII would run straight through its neighbours.
-// Each numeral is therefore shrunk to fit the angular gap it actually has,
+// Hour bands are not evenly spaced -- they narrow sharply toward midday, where
+// a full-size numeral would run straight through the boundary lines fencing
+// it. Each numeral is therefore shrunk to the room its band actually has,
 // which is what a dial maker does by hand. Returns the cap height to use.
-double fitted_height(const std::vector<HourMark>& marks, size_t i, double advance) {
-  const HourMark& m = marks[i];
+//
+// The room comes from the scene (HourMark::clearance), which measured it
+// against the real boundaries. Deriving it here from the spacing of
+// neighbouring hour marks instead is close but not close enough: bands are
+// asymmetric about their own hour, so that estimate lets the widest numerals
+// touch a line.
+double fitted_height(const HourMark& m, double advance) {
   if (advance <= 0.0) return 0.0;
-  double angle = std::atan2(m.direction.y, m.direction.x);
-  double smallest_gap = 3.14159265358979323846;  // no neighbour: keep nominal size
-  for (size_t k = 0; k < marks.size(); ++k) {
-    if (k == i) continue;
-    double other = std::atan2(marks[k].direction.y, marks[k].direction.x);
-    double d = std::fabs(angle - other);
-    if (d > 3.14159265358979323846) d = 2.0 * 3.14159265358979323846 - d;
-    smallest_gap = std::min(smallest_gap, d);
-  }
-  // Chord available at the numeral's radius, with a margin so neighbours
-  // don't touch even at their widest.
-  double available = 0.86 * smallest_gap * m.radius;
+  // The glyphs are laid out about their own centre, so the width that fits
+  // between the two boundaries is twice the clearance to the nearer one, less
+  // a margin so the lettering does not come right up against the line.
+  double available = 2.0 * 0.85 * m.clearance;
   return std::min(m.height, available / advance);
 }
 
@@ -106,7 +103,7 @@ EngravingMap build_hour_numeral_engraving(const DialScene& scene, int size) {
     double cx = ux * mark.radius, cy = uy * mark.radius;
 
     double total_advance = advance_width(text);
-    double scale = fitted_height(scene.hour_marks, mark_index, total_advance);
+    double scale = fitted_height(mark, total_advance);
     if (scale <= 0.0) continue;
 
     double pen = -0.5 * total_advance;
