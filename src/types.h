@@ -55,6 +55,10 @@ struct Config {
   bool show_seconds = false;
   bool roman_numerals = false;
   std::string analog_midnight_label = "24";
+  // Which timebase the dial themes read in: "apparent" (what the sun actually
+  // does -- a real dial), "mean" (local mean solar time) or "clock" (agrees
+  // with your wall clock).
+  std::string dial_time = "apparent";
   double latitude = 0.0;
   double longitude = 0.0;
   std::map<std::string, Source> sources;

@@ -17,6 +17,28 @@
 #include "dial_scene.h"
 #include "types.h"
 
+// What the dial is made to READ. A dial left to itself tells apparent solar
+// time: the sun's own time, which runs ahead of and behind the clock by up to
+// a quarter of an hour over the year and is offset again by where you sit in
+// your time zone. The corrected modes force the shadow onto the hour line for
+// the time you actually want, by rendering the light at the hour angle a sun
+// keeping that time would have. Declination is left alone, so shadows keep
+// their real seasonal length -- it is the same trick a heliochronometer plays
+// mechanically.
+enum class DialTimebase {
+  // Uncorrected. The instrument a real dial is.
+  Apparent,
+  // Apparent minus the equation of time: local mean solar time. Noon here is
+  // the average of the sun's noons over the year, at YOUR longitude -- which
+  // is still not your wall clock unless you happen to sit on your zone's
+  // standard meridian and keep no daylight saving.
+  Mean,
+  // Local mean time carried the rest of the way to civil time. Taken from the
+  // system clock rather than computed, so the zone's own rules and daylight
+  // saving come along for free.
+  Clock,
+};
+
 enum class DialMode {
   // Pinned. The dial never changes out from under you; it simply goes dark
   // when its own light is gone, the way the real instrument in a garden does.
@@ -49,19 +71,31 @@ class DialClockFace : public ClockFace {
   static Form make_form(const Config& cfg, bool moondial, const DialPalette& palette);
 
   // Unit vector in `form`'s own plate frame, pointing at the body that form
-  // is read by. Per-form because the two have different plate frames.
-  Vec3 light_for(const Form& form, double jd) const;
+  // is read by, already carrying any timebase correction. Per-form because
+  // the two have different plate frames and read different bodies.
+  // `civil_hours` is the local wall-clock time of day, needed only by
+  // DialTimebase::Clock.
+  Vec3 light_for(const Form& form, double jd, double civil_hours) const;
+
+  // The hour this form's shadow points at, in [0,24), before correction. The
+  // hour lines were laid out against hour angle, so this inverts that.
+  double dial_reading_hours(const Form& form, double jd, double lst_hours) const;
+
+  // How far to shift the light's hour angle, in hours, for the dial to read
+  // the configured timebase. Zero for Apparent.
+  double timebase_correction_hours(const Form& form, double jd, double lst_hours, double civil_hours) const;
 
   // Whether the dial still tells the time -- see the .cpp; this is about the
   // gnomon's shadow landing on the plate, not merely about the body being up.
-  bool is_readable(const Form& form, double jd) const;
+  bool is_readable(const Form& form, double jd, double civil_hours) const;
 
   // No-op unless the mode is Auto. Picks the opening dial on the first frame
   // (without a crossfade -- there is nothing to fade from at startup), and
   // thereafter changes over when the current dial stops being readable.
-  void update_form_choice(double jd, double now_seconds);
+  void update_form_choice(double jd, double now_seconds, double civil_hours);
 
   DialMode mode_;
+  DialTimebase timebase_;
   double latitude_deg_;
   double longitude_deg_;
   Form sun_form_;

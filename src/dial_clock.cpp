@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <string>
 
 #include "astro.h"
+#include "dial_time.h"
 
 namespace {
 
@@ -66,6 +68,12 @@ Vec3 color_from_config(Color c) {
   return Vec3{c.r / 255.0, c.g / 255.0, c.b / 255.0};
 }
 
+DialTimebase parse_timebase(const std::string& s) {
+  if (s == "mean") return DialTimebase::Mean;
+  if (s == "clock") return DialTimebase::Clock;
+  return DialTimebase::Apparent;  // config.cpp has already rejected anything else
+}
+
 }  // namespace
 
 DialClockFace::Form DialClockFace::make_form(const Config& cfg, bool moondial, const DialPalette& palette) {
@@ -85,6 +93,7 @@ DialClockFace::Form DialClockFace::make_form(const Config& cfg, bool moondial, c
 
 DialClockFace::DialClockFace(const Config& cfg, DialMode mode)
     : mode_(mode),
+      timebase_(parse_timebase(cfg.dial_time)),
       latitude_deg_(cfg.latitude),
       longitude_deg_(cfg.longitude),
       sun_form_(make_form(cfg, /*moondial=*/false, kSunPalette)),
@@ -92,9 +101,36 @@ DialClockFace::DialClockFace(const Config& cfg, DialMode mode)
       camera_(default_camera()),
       showing_moondial_(mode == DialMode::MoonOnly) {}
 
-Vec3 DialClockFace::light_for(const Form& form, double jd) const {
+double DialClockFace::dial_reading_hours(const Form& form, double jd, double lst_hours) const {
+  EquatorialCoord eq = form.moondial ? lunar_position(jd) : solar_position_full(jd).eq;
+  return ::dial_reading_hours(form.moondial, eq.ra_deg, lst_hours);
+}
+
+// The correction is expressed as a shift in the light's HOUR ANGLE, which is
+// the one quantity the hour lines are a function of. Shifting it moves the
+// shadow along the plate exactly as far as the correction is worth, and
+// leaves declination -- and so the shadow's seasonal length -- alone.
+//
+// Note this really does move the rendered sun: in a corrected mode the light
+// rises and sets at corrected times too, which is the honest consequence of
+// the dial keeping a different clock, not a bug.
+double DialClockFace::timebase_correction_hours(const Form& form, double jd, double lst_hours,
+                                                 double civil_hours) const {
+  if (timebase_ == DialTimebase::Apparent) return 0.0;
+  // Mean time is derived from the SUN even for the moon dial, so the two
+  // dials in auto_dial agree with each other and with a mean-time sundial --
+  // which also corrects the moon's own ~50 min/day retardation for free.
+  double target = (timebase_ == DialTimebase::Clock) ? civil_hours : local_mean_solar_time_hours(jd, lst_hours);
+  return timebase_shift_hours(target, dial_reading_hours(form, jd, lst_hours));
+}
+
+Vec3 DialClockFace::light_for(const Form& form, double jd, double civil_hours) const {
   EquatorialCoord eq = form.moondial ? lunar_position(jd) : solar_position_full(jd).eq;
   double lst_hours = local_sidereal_time_hours(jd, longitude_deg_);
+  // Hour angle = lst*15 - ra, so advancing the sidereal time we hand to the
+  // transform advances the hour angle by the same amount -- that IS the
+  // correction, applied without touching declination.
+  lst_hours += timebase_correction_hours(form, jd, lst_hours, civil_hours);
   HorizontalCoord hc = equatorial_to_horizontal(eq, latitude_deg_, lst_hours);
   return light_direction_local(form.frame, horizontal_to_world(hc));
 }
@@ -105,11 +141,11 @@ Vec3 DialClockFace::light_for(const Form& form, double jd) const {
 // slides off the edge and there is no hour to read, well before the sun
 // touches the horizon. That is the moment the instrument stops working, and
 // so the moment worth changing over at.
-bool DialClockFace::is_readable(const Form& form, double jd) const {
+bool DialClockFace::is_readable(const Form& form, double jd, double civil_hours) const {
   // A moon this thin throws no shadow you could read an hour from, however
   // high it has risen -- so the geometry test below never gets a say.
   if (form.moondial && moon_illuminated_fraction(jd) < kMinReadableMoonPhase) return false;
-  return shadow_falls_on_plate(form.scene, light_for(form, jd));
+  return shadow_falls_on_plate(form.scene, light_for(form, jd, civil_hours));
 }
 
 // Hold the dial we are on for as long as it still tells the time, and change
@@ -117,7 +153,7 @@ bool DialClockFace::is_readable(const Form& form, double jd) const {
 // -- the small hours under a new moon -- stay put and go dark rather than
 // swapping to an equally unreadable dial. Staying put is also what keeps this
 // from flapping around the moment either condition is marginal.
-void DialClockFace::update_form_choice(double jd, double now_seconds) {
+void DialClockFace::update_form_choice(double jd, double now_seconds, double civil_hours) {
   if (mode_ != DialMode::Auto) return;  // pinned: the dial never changes
 
   // Opening frame: there is no dial to fade FROM, so pick the right one
@@ -126,21 +162,21 @@ void DialClockFace::update_form_choice(double jd, double now_seconds) {
   // side of the horizon, so the dark plate on screen is the plausible one.
   if (!chose_opening_form_) {
     chose_opening_form_ = true;
-    if (is_readable(sun_form_, jd)) {
+    if (is_readable(sun_form_, jd, civil_hours)) {
       showing_moondial_ = false;
-    } else if (is_readable(moon_form_, jd)) {
+    } else if (is_readable(moon_form_, jd, civil_hours)) {
       showing_moondial_ = true;
     } else {
-      showing_moondial_ = normalize(light_for(sun_form_, jd)).z <= 0.0;
+      showing_moondial_ = normalize(light_for(sun_form_, jd, civil_hours)).z <= 0.0;
     }
     return;
   }
 
   const Form& current = showing_moondial_ ? moon_form_ : sun_form_;
-  if (is_readable(current, jd)) return;
+  if (is_readable(current, jd, civil_hours)) return;
 
   const Form& other = showing_moondial_ ? sun_form_ : moon_form_;
-  if (!is_readable(other, jd)) return;
+  if (!is_readable(other, jd, civil_hours)) return;
 
   showing_moondial_ = !showing_moondial_;
   fading_ = true;
@@ -162,7 +198,14 @@ void DialClockFace::render(SDL_Window* win, SDL_Renderer* /*r*/, int ww, int wh,
   double jd = julian_day(utc_tm);
   double now_seconds = static_cast<double>(SDL_GetTicks64()) / 1000.0;
 
-  update_form_choice(jd, now_seconds);
+  // Wall-clock time of day, straight from the system's own zone rules, so
+  // DialTimebase::Clock inherits this zone's offset and daylight saving
+  // without this code knowing anything about either.
+  std::tm local_tm{};
+  localtime_r(&now, &local_tm);
+  double civil_hours = local_tm.tm_hour + local_tm.tm_min / 60.0 + local_tm.tm_sec / 3600.0;
+
+  update_form_choice(jd, now_seconds, civil_hours);
 
   const Form& incoming = showing_moondial_ ? moon_form_ : sun_form_;
   const Form& outgoing = showing_moondial_ ? sun_form_ : moon_form_;
@@ -186,9 +229,9 @@ void DialClockFace::render(SDL_Window* win, SDL_Renderer* /*r*/, int ww, int wh,
   // a rising alpha. Two different plates can't be interpolated geometrically,
   // so this dissolve is the transition.
   if (fading_) {
-    gl_renderer_.draw(outgoing.scene, camera_, light_for(outgoing, jd), outgoing.palette, background, 1.0f);
+    gl_renderer_.draw(outgoing.scene, camera_, light_for(outgoing, jd, civil_hours), outgoing.palette, background, 1.0f);
   }
-  gl_renderer_.draw(incoming.scene, camera_, light_for(incoming, jd), incoming.palette, background, fade);
+  gl_renderer_.draw(incoming.scene, camera_, light_for(incoming, jd, civil_hours), incoming.palette, background, fade);
   gl_renderer_.end_frame(win);
 }
 

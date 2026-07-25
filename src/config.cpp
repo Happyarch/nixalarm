@@ -178,6 +178,10 @@ static std::string default_config_text() {
       "show_seconds = false\n"
       "roman_numerals = false\n"
       "analog_midnight_label = \"24\"\n"
+      "# Dial themes: \"apparent\" reads what the sun actually does (a real dial),\n"
+      "# \"mean\" applies the equation of time, \"clock\" also applies your time zone\n"
+      "# and DST so the dial agrees with your wall clock.\n"
+      "dial_time = \"apparent\"\n"
       "\n"
       "# No-SDR the local area NOAA backup.\n"
       "[sources.weather_stream]\n"
@@ -319,6 +323,15 @@ Config load_config(const fs::path& path) {
         else if (key == "glow") cfg.glow = parse_bool(val);
         else if (key == "show_seconds") cfg.show_seconds = parse_bool(val);
         else if (key == "roman_numerals") cfg.roman_numerals = parse_bool(val);
+        else if (key == "dial_time") {
+          std::string mode = unquote(val);
+          if (mode == "apparent" || mode == "mean" || mode == "clock") {
+            cfg.dial_time = mode;
+          } else {
+            std::cerr << "nixalarm: dial_time must be \"apparent\", \"mean\" or \"clock\"; using "
+                      << cfg.dial_time << "\n";
+          }
+        }
         else if (key == "analog_midnight_label") {
           std::string label = unquote(val);
           if (label == "24" || label == "0") {

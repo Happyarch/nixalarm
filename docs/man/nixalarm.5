@@ -202,6 +202,23 @@ For the
 theme, use the Roman-numeral SVG face instead of the default Arabic-numeral
 SVG face.
 .TP
+.B dial_time = "apparent"
+What the dial themes read.
+.B apparent
+is the sun's own time, uncorrected, as a real dial tells it.
+.B mean
+applies the equation of time to give local mean solar time -- note this is
+still keyed to your longitude, not your zone's standard meridian, so it will
+not agree with your watch.
+.B clock
+carries that the rest of the way to civil time, taking the zone offset and
+daylight saving from the system, and is the setting that matches a watch.
+.IP
+The correction is applied by rendering the light at the hour angle a sun
+keeping that time would have; declination is untouched, so shadows keep their
+real seasonal length. In a corrected mode the rendered light also rises and
+sets at corrected times.
+.TP
 .B analog_midnight_label = "24"
 Reserved for non-SVG 24-hour analog faces; ignored by the current
 .B analog
@@ -293,6 +310,7 @@ theme = "sinnoh_green"
 show_seconds = false
 roman_numerals = false
 analog_midnight_label = "24"
+dial_time = "apparent"
 
 [sources.local_song]
 type = "file"
