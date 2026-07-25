@@ -8,8 +8,14 @@
 // dial's gnomon degenerates to zero height.
 //
 // World frame convention throughout: right-handed, Z-up (Z=zenith, X=north,
-// Y=east). A graphics-convention basis swap (Z-up -> Y-up) happens only once,
-// at the final camera/rendering stage -- never inside this module's math.
+// Y=west). West, not east: (north, east, up) is a LEFT-handed triple, and the
+// renderer reads the plate-local image of this frame as ordinary right-handed
+// space, so a left-handed basis renders the whole scene as its own mirror image
+// -- the shadow and the hour marks stay mutually consistent, so the dial still
+// tells the right time, but it sweeps backwards for its hemisphere.
+//
+// A graphics-convention basis swap (Z-up -> Y-up) happens only once, at the
+// final camera/rendering stage -- never inside this module's math.
 //
 // All lengths (plate radius, gnomon/style length) are normalized dimensionless
 // units: plate_radius = 1.0, gnomon_length = 0.5 by convention (see
@@ -67,9 +73,14 @@ PlateFrame compute_plate_frame(double slant_deg, double declination_deg);
 // the plate, where the substyle direction is undefined.
 PlateFrame substyle_aligned_plate_frame(double latitude_deg, double slant_deg, double declination_deg);
 
-// The gnomon's style direction, fixed in world space regardless of plate
-// tilt: elevation = latitude, azimuth = due north (points at the celestial
-// pole). Non-negotiable astronomy, not a free parameter.
+// The gnomon's style direction, fixed in world space regardless of plate tilt:
+// it points at whichever celestial pole is ABOVE the horizon -- north at
+// elevation = latitude in the northern hemisphere, due south at elevation
+// = |latitude| in the southern, where the north pole is underground. Both are
+// the same axis; only the ray differs. Non-negotiable astronomy, not a free
+// parameter. A consequence worth knowing: because the plate then faces the
+// southern pole down there, a southern dial's shadow sweeps COUNTER-clockwise,
+// as real southern-hemisphere dials do.
 Vec3 style_vector_world(double latitude_deg);
 
 // Expresses a world-space vector in the plate's local {u, v, n} coordinates.
@@ -104,7 +115,7 @@ constexpr double kObliquityDeg = 23.44;
 double construction_declination_deg(double latitude_deg);
 
 // Converts a horizontal (az/alt) coordinate to a unit world-space direction
-// vector (Z-up, X-north, Y-east). Exposed so callers can turn astro.h's live
+// vector (Z-up, X-north, Y-west). Exposed so callers can turn astro.h's live
 // sun/moon position (via equatorial_to_horizontal) into the same world-frame
 // representation this module's math already uses internally.
 Vec3 horizontal_to_world(HorizontalCoord hc);

@@ -55,7 +55,10 @@ void test_horizontal_closed_form_regression() {
       // so compare via the tangent value itself (robust to that ambiguity)
       // rather than the raw angle.
       double general_tan = dir.y / dir.x;
-      double expected_tan = std::sin(deg2rad(lat)) * std::tan(deg2rad(h));
+      // Negated because local +v is WEST (dial_geometry.h's right-handed world
+      // frame), while the closed form measures the dial angle off the noon
+      // line toward the shadow, i.e. eastward for a positive hour angle.
+      double expected_tan = -std::sin(deg2rad(lat)) * std::tan(deg2rad(h));
       char label[128];
       std::snprintf(label, sizeof(label), "horizontal closed-form lat=%.0f H=%.0f", lat, h);
       expect_near(general_tan, expected_tan, 1e-6, label);
@@ -144,7 +147,24 @@ void test_style_vector_matches_latitude() {
     Vec3 s = style_vector_world(lat);
     expect_near(length(s), 1.0, 1e-9, "style vector is unit length");
     expect_near(rad2deg(std::asin(s.z)), lat, 1e-6, "style elevation equals latitude");
-    expect_near(s.y, 0.0, 1e-9, "style has zero east component (azimuth = due north)");
+    expect_near(s.y, 0.0, 1e-9, "style has zero east-west component (azimuth = due north)");
+  }
+  // Southern hemisphere: the north pole is underground, so the style takes the
+  // other end of the same axis -- due SOUTH at elevation |latitude|.
+  for (double lat : {-2.0, -35.6, -60.0, -90.0}) {
+    Vec3 s = style_vector_world(lat);
+    char label[128];
+    expect_near(length(s), 1.0, 1e-9, "southern style vector is unit length");
+    std::snprintf(label, sizeof(label), "lat=%.1f style elevation equals |latitude|", lat);
+    expect_near(rad2deg(std::asin(s.z)), -lat, 1e-6, label);
+    std::snprintf(label, sizeof(label), "lat=%.1f style points due south (x negative, y zero)", lat);
+    expect_true(s.x <= 1e-9 && std::fabs(s.y) < 1e-9, label);
+    // The mirror latitude's style is this one reflected north-south: same
+    // elevation above the horizon, opposite compass direction. (Not the negated
+    // vector -- that ray points below the horizon, which is the whole bug.)
+    Vec3 mirrored = style_vector_world(-lat);
+    expect_near(mirrored.x, -s.x, 1e-9, "mirror latitude's style faces the opposite pole");
+    expect_near(mirrored.z, s.z, 1e-9, "mirror latitude's style has the same elevation");
   }
 }
 
@@ -254,9 +274,84 @@ void test_substyle_aligned_frame() {
   }
 }
 
+// Net rotation of the tip shadow about the plate's outward normal over the
+// construction day, in radians: negative = clockwise as rendered (dial_gl reads
+// the plate-local frame as ordinary right-handed space, so +n faces the camera).
+double net_shadow_turn(double lat, bool moondial) {
+  DialOrientation o = optimize_dial_orientation(lat, kDefaultGnomonLength, kDefaultPlateRadius,
+                                                 kDefaultLegibleRatio, moondial);
+  PlateFrame frame = substyle_aligned_plate_frame(lat, o.slant_deg, o.declination_deg);
+  double decl = construction_declination_deg(lat);
+  double net_turn = 0.0, prev_angle = 0.0;
+  bool have_prev = false;
+  for (double h = -90.0; h <= 90.0; h += 5.0) {
+    ShadowSample s = shadow_point_on_plate(lat, frame, kDefaultGnomonLength, h, moondial, decl);
+    if (!s.valid) continue;
+    double angle = std::atan2(s.point_local.y, s.point_local.x);
+    if (have_prev) {
+      double d = angle - prev_angle;
+      while (d > kPi) d -= 2.0 * kPi;
+      while (d < -kPi) d += 2.0 * kPi;
+      net_turn += d;
+    }
+    prev_angle = angle;
+    have_prev = true;
+  }
+  return net_turn;
+}
+
+// The bug this pins: with a left-handed world basis (Y=east) every number here
+// still agrees with classical gnomonics, because the hour marks are built from
+// the same shadow math as the shadow itself -- but the renderer reads the
+// plate-local frame as ordinary right-handed space, so the dial comes out as its
+// own mirror image and the shadow sweeps backwards for its hemisphere.
+//
+// A dial's shadow turns clockwise about its outward normal when that normal
+// looks toward the pole its style points at, so the sense follows the visible
+// pole: clockwise in the north, counter-clockwise in the south. Latitude 0 is a
+// boundary case and goes with the north, matching style_vector_world's >= 0.
+void test_shadow_sweep_follows_the_hemisphere() {
+  for (double lat : {-70.0, -51.5, -33.9, -10.0, 0.0, 20.0, 35.6, 51.5, 70.0}) {
+    for (bool moondial : {false, true}) {
+      double net_turn = net_shadow_turn(lat, moondial);
+      bool northern = lat >= 0.0;
+      char label[192];
+      std::snprintf(label, sizeof(label), "%s lat=%.1f shadow sweeps %s about +n (net turn %.3f rad)",
+                    moondial ? "moondial" : "sundial", lat, northern ? "clockwise" : "counter-clockwise",
+                    net_turn);
+      expect_true(northern ? net_turn < -0.1 : net_turn > 0.1, label);
+    }
+  }
+}
+
+// The two hemispheres are mirror images, so a dial at -lat must be exactly as
+// good as one at +lat. Aiming the style at the north pole regardless of
+// hemisphere broke this: the southern plate had to recline steeply to face an
+// underground style, which threw the early and late shadows off its edge and
+// cost roughly 4.5 of the day's ~11.3 legible hours.
+void test_optimizer_is_hemisphere_symmetric() {
+  for (double lat : {5.0, 23.5, 35.6, 51.5, 70.0}) {
+    for (bool moondial : {false, true}) {
+      DialOrientation north = optimize_dial_orientation(lat, kDefaultGnomonLength, kDefaultPlateRadius,
+                                                          kDefaultLegibleRatio, moondial);
+      DialOrientation south = optimize_dial_orientation(-lat, kDefaultGnomonLength, kDefaultPlateRadius,
+                                                          kDefaultLegibleRatio, moondial);
+      char label[192];
+      std::snprintf(label, sizeof(label), "%s lat=+-%.1f both hemispheres get the same legible window",
+                    moondial ? "moondial" : "sundial", lat);
+      expect_near(south.contiguous_hours, north.contiguous_hours, 0.2, label);
+      std::snprintf(label, sizeof(label), "%s lat=+-%.1f both hemispheres get the same plate slant",
+                    moondial ? "moondial" : "sundial", lat);
+      expect_near(south.slant_deg, north.slant_deg, 0.5, label);
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
+  test_shadow_sweep_follows_the_hemisphere();
+  test_optimizer_is_hemisphere_symmetric();
   test_horizontal_closed_form_regression();
   test_hour_line_direction_is_declination_invariant();
   test_construction_declination_follows_the_hemisphere();

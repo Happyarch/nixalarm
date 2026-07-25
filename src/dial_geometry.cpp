@@ -10,7 +10,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 double deg2rad(double d) { return d * kPi / 180.0; }
 
-// Standard right-hand-rule rotation about the world Y (east) axis.
+// Standard right-hand-rule rotation about the world Y (west) axis.
 Vec3 rotate_y(Vec3 v, double angle_deg) {
   double a = deg2rad(angle_deg);
   double c = std::cos(a), s = std::sin(a);
@@ -24,11 +24,17 @@ Vec3 rotate_z(Vec3 v, double angle_deg) {
   return Vec3{v.x * c - v.y * s, v.x * s + v.y * c, v.z};
 }
 
+// Compass azimuth runs clockwise from north as seen from above, which is the
+// NEGATIVE sense about the zenith in a right-handed Z-up frame -- hence the
+// sign on y (=west). Taking +y as east instead builds a left-handed triple
+// (north, east, up), and since the renderer treats this frame's plate-local
+// image as ordinary right-handed space, the whole scene comes out mirrored:
+// east and west swap and the shadow sweeps backwards for the hemisphere.
 Vec3 az_alt_to_world(HorizontalCoord hc) {
   double alt_rad = deg2rad(hc.altitude_deg);
   double az_rad = deg2rad(hc.azimuth_deg);
   double ca = std::cos(alt_rad);
-  return Vec3{ca * std::cos(az_rad), ca * std::sin(az_rad), std::sin(alt_rad)};
+  return Vec3{ca * std::cos(az_rad), -ca * std::sin(az_rad), std::sin(alt_rad)};
 }
 
 // Internal fast-path variants taking a precomputed frame/style vector, so the
@@ -250,14 +256,16 @@ Vec3 normalize(Vec3 v) {
 
 PlateFrame compute_plate_frame(double slant_deg, double declination_deg) {
   Vec3 n0{0.0, 0.0, 1.0}, u0{1.0, 0.0, 0.0}, v0{0.0, 1.0, 0.0};
-  // Tip away from horizontal about the east axis; negate the angle so a
+  // Tip away from horizontal about the east-west axis; negate the angle so a
   // positive slant tips the normal toward south by default (rotate_y's
   // standard convention tips toward north for positive angles).
   Vec3 n1 = rotate_y(n0, -slant_deg);
   Vec3 u1 = rotate_y(u0, -slant_deg);
   Vec3 v1 = rotate_y(v0, -slant_deg);
-  // Spin about zenith by declination, measured clockwise from south.
-  return PlateFrame{rotate_z(u1, declination_deg), rotate_z(v1, declination_deg), rotate_z(n1, declination_deg)};
+  // Spin about zenith by declination, measured clockwise from south. Compass
+  // clockwise is the negative sense about the zenith here (see az_alt_to_world).
+  return PlateFrame{rotate_z(u1, -declination_deg), rotate_z(v1, -declination_deg),
+                    rotate_z(n1, -declination_deg)};
 }
 
 PlateFrame substyle_aligned_plate_frame(double latitude_deg, double slant_deg, double declination_deg) {
@@ -273,9 +281,20 @@ PlateFrame substyle_aligned_plate_frame(double latitude_deg, double slant_deg, d
   return PlateFrame{u, v, frame.n};
 }
 
+// Both celestial poles lie on the style's line; the ray that matters is the
+// one ABOVE the observer's horizon, since that is the half of the axis a dial's
+// gnomon is built along. North of the equator that is the north pole (north,
+// elevation = latitude); south of it the north pole is underground and the
+// SOUTH pole is up (south, elevation = |latitude|), which is the same negated
+// vector. Returning the north ray unconditionally hands southern latitudes a
+// style pointing into the ground, and the optimizer can then only satisfy its
+// elevation floor by reclining the plate up to face it -- a north-facing
+// reclining dial instead of the classical horizontal one, costing most of the
+// day's legible hours.
 Vec3 style_vector_world(double latitude_deg) {
   double lat_rad = deg2rad(latitude_deg);
-  return Vec3{std::cos(lat_rad), 0.0, std::sin(lat_rad)};
+  Vec3 north_pole{std::cos(lat_rad), 0.0, std::sin(lat_rad)};
+  return latitude_deg >= 0.0 ? north_pole : north_pole * -1.0;
 }
 
 Vec3 project_to_local(Vec3 world_vec, const PlateFrame& frame) {
