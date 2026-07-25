@@ -54,14 +54,12 @@ constexpr DialPalette kMoonPalette{
     Vec3{0.05, 0.06, 0.10},  // sky fill
 };
 
-// How long the changeover takes. Slow enough to read as one instrument
-// dissolving into the other rather than a glitch, short enough that nobody
-// watches it finish.
+// Long enough to read as a dissolve rather than a glitch, short enough not to
+// sit through.
 constexpr double kCrossfadeSeconds = 2.5;
 
-// A moon this thin throws no shadow you could read an hour from, so the moon
-// dial does not count as usable however high it has risen. Roughly a quarter
-// moon; below it the terminator's own shadow swamps the gnomon's.
+// Below roughly a quarter moon the terminator's own shadow swamps the
+// gnomon's, so the moon dial is unusable however high the moon has risen.
 constexpr double kMinReadableMoonPhase = 0.22;
 
 Vec3 color_from_config(Color c) {
@@ -111,9 +109,8 @@ double DialClockFace::dial_reading_hours(const Form& form, double jd, double lst
 // shadow along the plate exactly as far as the correction is worth, and
 // leaves declination -- and so the shadow's seasonal length -- alone.
 //
-// Note this really does move the rendered sun: in a corrected mode the light
-// rises and sets at corrected times too, which is the honest consequence of
-// the dial keeping a different clock, not a bug.
+// Note this moves the rendered sun: in a corrected mode the light also rises
+// and sets at corrected times.
 double DialClockFace::timebase_correction_hours(const Form& form, double jd, double lst_hours,
                                                  double civil_hours) const {
   if (timebase_ == DialTimebase::Apparent) return 0.0;
@@ -135,15 +132,12 @@ Vec3 DialClockFace::light_for(const Form& form, double jd, double civil_hours) c
   return light_direction_local(form.frame, horizontal_to_world(hc));
 }
 
-// Whether this dial can actually be READ right now -- which is a stricter
-// question than whether its body has risen. The gnomon's shadow has to fall
-// somewhere on the plate: once the sun drops low enough the shadow of the tip
-// slides off the edge and there is no hour to read, well before the sun
-// touches the horizon. That is the moment the instrument stops working, and
-// so the moment worth changing over at.
+// Whether the dial can be read now -- stricter than "the body has risen". The
+// tip's shadow must land on the plate; below some elevation it slides off the
+// edge, well before the body reaches the horizon.
 bool DialClockFace::is_readable(const Form& form, double jd, double civil_hours) const {
-  // A moon this thin throws no shadow you could read an hour from, however
-  // high it has risen -- so the geometry test below never gets a say.
+  // Too thin a crescent casts no readable shadow at any elevation, so the
+  // geometry test below never gets a say.
   if (form.moondial && moon_illuminated_fraction(jd) < kMinReadableMoonPhase) return false;
   return shadow_falls_on_plate(form.scene, light_for(form, jd, civil_hours));
 }

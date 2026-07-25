@@ -43,24 +43,21 @@ struct SceneRod {
   DialMaterial material = DialMaterial::Gnomon;
 };
 
-// One hour line's label: which numeral to letter onto the plate, and where.
-// Emitted alongside the tick rods and in the same order, so a mark always has
-// a tick -- an hour whose shadow falls off the plate gets neither.
+// One hour's label: which numeral to cut, and where. One per readable hour, in
+// hour order. The boundary rods are separate and there is one more of them --
+// they fall at the half hours, fencing the band each numeral sits in.
 //
-// This is geometry, not rendering: the numerals are ENGRAVED, cut into the
-// plate as a height field (src/dial_engrave.h) that the tracer reads as bump,
-// so they catch the same raking light the rest of the stone does instead of
-// sitting on top of it as decals.
+// Geometry, not rendering: dial_engrave cuts these into the plate as a height
+// field the tracer reads as bump.
 struct HourMark {
   Vec2 direction;   // unit, on the plate, from the dial center toward the mark
   double radius;    // distance from the center to the numeral's center
   double height;    // cap height of the numeral, in plate units
-  // How much room the numeral actually has: the perpendicular distance from
-  // its center to the NEARER of the two boundary lines fencing its band, less
-  // the width of that line itself. Bands are not symmetric about their hour
-  // and they narrow sharply toward midday, so a numeral sized from anything
-  // else -- the spacing of neighbouring hours, say -- ends up struck through
-  // by a boundary. The engraver scales the lettering to fit this.
+  // Perpendicular distance to the nearer of the two boundaries fencing this
+  // band, less the boundary's own width. Bands are asymmetric about their hour
+  // and narrow sharply near midday, so sizing a numeral from anything else
+  // (neighbouring hour spacing, say) strikes it through. The engraver scales
+  // the lettering to fit this.
   double clearance = 0.0;
   int hour = 12;    // 1..12; the numeral to cut
 };
@@ -81,12 +78,10 @@ struct DialScene {
 DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientation, double gnomon_length,
                             double plate_radius, bool moondial);
 
-// Whether this dial can be READ under the given light -- a stricter question
-// than whether the sun or moon has risen. The gnomon tip's shadow has to land
-// somewhere on the plate: as the light drops toward the plate's own horizon
-// the shadow lengthens and slides off the edge, and from that moment there is
-// no hour to read, well before the body actually sets. That crossing is the
-// honest moment to change a dial over to the other light.
+// Whether the dial can be read under this light -- stricter than "the body has
+// risen". As the light drops toward the plate's horizon the tip's shadow
+// lengthens and slides off the edge, well before the body sets. That crossing
+// is when the dial stops working.
 //
 // light_local: in the same plate frame as the scene, pointing FROM the
 // surface TOWARD the body (light_direction_local()'s convention); need not be

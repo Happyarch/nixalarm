@@ -54,16 +54,14 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
   }
 
   double tick_r = plate_radius * kTickRodRadiusRatio;
-  // Hour lines are laid out for the observer's SUMMER SOLSTICE, the longest
-  // day: that is every hour the light can ever be up for, and a dial built to
-  // any lesser declination is permanently missing its earliest and latest
-  // hours. It costs nothing in accuracy -- the style is polar-aligned, so
-  // declination moves the shadow along its hour line but never off it.
+  // Laid out for the observer's summer solstice: the longest day, so the dial
+  // carries every hour its light can reach. Costs no accuracy -- the style is
+  // polar-aligned, so declination slides the shadow along its hour line, never
+  // off it.
   double construction_decl = construction_declination_deg(latitude_deg);
 
-  // The direction on the plate the shadow takes at a given hour angle, if it
-  // takes one at all. Used for both the hour BOUNDARIES and the numerals,
-  // which is what keeps the two exactly half an hour apart by construction.
+  // Shadow direction on the plate for an hour angle, if there is one. Shared
+  // by boundaries and numerals, which keeps them half an hour apart.
   auto shadow_direction_at = [&](double hour_angle, Vec2* out) {
     Vec3 light_w = idealized_light_direction_world(latitude_deg, hour_angle, moondial, construction_decl);
     if (light_w.z <= 0.0) return false;  // sun/moon below the true horizon at this hour
@@ -79,27 +77,23 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
     return true;
   };
 
-  // The dial is read as HOUR BANDS, not hour lines: the engraved lines are the
-  // boundaries BETWEEN hours, drawn at the half hours, and each numeral sits
-  // in the middle of the band its two boundaries enclose. So the shadow lying
-  // inside a band names that hour, rather than having to coincide with a line.
+  // Hour bands: the drawn lines are the boundaries between hours, at the half
+  // hours, and each numeral sits in the band between two of them. The shadow
+  // falling inside a band names that hour.
   //
-  // The readable hours, and where each sits on the plate. Collected first
-  // because the boundaries are placed relative to them: a band has to be
-  // closed on both sides or the numeral in it means nothing.
+  // Hours are collected first; boundaries are placed relative to them, and
+  // every band needs both sides closed.
   struct HourEntry {
     double hour_angle;   // degrees from the dial's own noon
     double plate_angle;  // radians, direction on the plate
     int hour;            // 1..12
   };
-  // Swept in the DIAL'S OWN day order, outward from the middle of its light's
-  // time up. For the sun that middle is hour angle 0; for the moon it is 180,
-  // because a full moon transits at midnight. Sweeping -165..165 instead would
-  // split the moon dial's night across the wrap at +-180 -- leaving its hours
-  // in the wrong order for the banding below, and dropping its midnight hour
-  // altogether. Hour angles are kept CONTINUOUS here (they can run past 180)
-  // so midpoints between neighbours stay arithmetic; only the hour number
-  // needs the wrap.
+  // Swept outward from the dial's own day centre: hour angle 0 for the sun,
+  // 180 for the moon (a full moon transits at midnight). A -165..165 sweep
+  // would split the moon dial's night across the +-180 wrap, reversing its
+  // hour order and skipping hour angle 180 entirely. Angles stay continuous
+  // (may exceed 180) so neighbour midpoints are plain arithmetic; only the
+  // hour number wraps.
   double day_center = moondial ? 180.0 : 0.0;
   std::vector<HourEntry> hours;
   for (int step = -12; step < 12; ++step) {
@@ -121,16 +115,11 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
     while (hours[i].plate_angle - hours[i - 1].plate_angle < -kPi) hours[i].plate_angle += 2.0 * kPi;
   }
 
-  // Boundaries fall at the half hours, one more of them than there are hours,
-  // so every band is closed on both sides.
-  //
-  // The interior ones are the real half-hour lines wherever the construction
-  // light still reaches -- the hour-angle-to-plate-angle map is not linear, so
-  // the true half hour is not quite the bisector of its neighbours and it is
-  // worth asking for. Past the ends of the day it stops being computable (the
-  // light is below the horizon half an hour later), so the outermost bands are
-  // closed by mirroring their own width outward. Without that the first and
-  // last numerals sit in bands open at one end.
+  // Boundaries at the half hours, one more than there are hours, so every band
+  // is closed. Interior ones use the true half-hour line: the
+  // hour-angle-to-plate-angle map is nonlinear, so it is not the bisector of
+  // its neighbours. Past the ends of the day the half hour is below the
+  // horizon and uncomputable, so the outer bands mirror their own width.
   std::vector<double> bounds(hours.size() + 1, 0.0);
   for (size_t i = 1; i < hours.size(); ++i) {
     double midpoint = 0.5 * (hours[i - 1].plate_angle + hours[i].plate_angle);
@@ -151,21 +140,9 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
   bounds.front() = hours.front().plate_angle - first_half_width;
   bounds.back() = hours.back().plate_angle + last_half_width;
 
-  // Each boundary is drawn as a SECANT of the plate: a straight chord running
-  // rim to rim, tangent to the inner circle at the point its own half-hour
-  // direction crosses it, rather than a spoke converging on the gnomon foot.
-  //
-  // Two consequences, both intended. The chords all touch one circle, so they
-  // cross their neighbours a little outside it and weave into a rosette, and
-  // that shared tangent circle reads as a ring around the cleared foot. And
-  // because adjacent chords cross exactly on the hour ray between them, the
-  // wedge that opens outward from each crossing IS that hour's band -- which
-  // is where its numeral sits, out near the rim.
-  // Each numeral sits on its own hour ray, out near the rim, in the gap its
-  // two boundaries leave. How much gap that is has to be measured here and
-  // handed to the engraver: bands are not symmetric about their hour, and they
-  // narrow sharply around midday, so the room a numeral has is the distance to
-  // the NEARER of its own two boundaries and nothing else.
+  // Numerals sit on their hour ray near the rim. The engraver needs to know
+  // how much room each has: bands are asymmetric about their hour and narrow
+  // sharply near midday, so measure to the nearer boundary.
   double numeral_radius = plate_radius * kNumeralRadiusRatio;
   for (size_t i = 0; i < hours.size(); ++i) {
     double to_lower = std::fabs(hours[i].plate_angle - bounds[i]);
@@ -176,26 +153,15 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
                                          std::max(0.0, clearance), hours[i].hour});
   }
 
-  // Every boundary is a RAY FROM THE GNOMON FOOT, run out to the edge of the
-  // disc. That convergence is not decoration: an hour line is where the plane
-  // through the style and the light cuts the plate, and every such plane
-  // contains the style, so every hour line must pass through the point where
-  // the style meets the plate. A line that converges nowhere is not an hour
-  // line at all.
+  // Boundaries are rays from the gnomon foot out to the rim. An hour line is
+  // the plate's intersection with a plane containing the style, so every hour
+  // line passes through the style-plate intersection -- here the plate centre.
+  // Only the side away from the light casts shadow, hence a ray rather than a
+  // full line (github.com/tpeach90/sundials keeps lambda >= 0 for the same
+  // reason).
   //
-  // It also has to be a ray rather than a full line. The shadow only ever
-  // falls on ONE side of the foot -- the side away from the light -- so the
-  // backward half marks hours that can never be indicated there. (The
-  // reference implementation this dial's geometry follows,
-  // github.com/tpeach90/sundials, draws the same ray and says so plainly:
-  // "lambda = 0 is the plate/style intersection point. Negative values are on
-  // the wrong side.")
-  //
-  // Our style meets the plate at the plate's own centre, so these rays are
-  // radial. The degenerate case the reference handles separately -- a style
-  // lying in the plate, whose hour lines are parallel and converge nowhere --
-  // cannot arise here: the optimizer's kMinStyleElevationDeg floor keeps the
-  // style well clear of the plate.
+  // Parallel hour lines, from a style lying in the plate, can't occur here:
+  // kMinStyleElevationDeg rules it out.
   double foot_clearance = 2.0 * tick_r;  // just off the rod, so the lines read as converging on it
   for (double angle : bounds) {
     Vec2 dir{std::cos(angle), std::sin(angle)};

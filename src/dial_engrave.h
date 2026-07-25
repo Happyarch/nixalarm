@@ -1,17 +1,14 @@
 #pragma once
 
-// Cuts the dial's Roman hour numerals into the plate as a HEIGHT FIELD rather
-// than painting them on as a decal. The result is fed to the tracer as a bump
-// source (src/dial_gl.cpp perturbs the plate normal by its gradient), so the
-// numerals are lit by the same raking sun or moonlight as the stone around
-// them: they fill with shadow when the light is low and nearly vanish when it
-// is overhead, exactly as a real chiselled dial does. Nothing here knows about
-// OpenGL -- it is plain CPU rasterization, so it is unit-testable without a
-// window or context, same as dial_scene.
+// Rasterizes the dial's Roman hour numerals into a height field. dial_gl feeds
+// it to the tracer as a bump source, perturbing the plate normal by its
+// gradient, so the numerals catch the same raking light as the stone instead
+// of reading as a decal.
 //
-// Strokes are cut as V-grooves (depth falls off linearly from the stroke
-// centerline to its edge) because a flat-bottomed cut has no gradient in its
-// interior and would light up as a flat plateau instead of a groove.
+// Strokes are V-grooves: depth falls off linearly from the centerline. A
+// flat-bottomed cut has no gradient in its interior and lights as a plateau.
+//
+// No GL dependency, so it is testable without a context -- as dial_scene.
 
 #include <cstdint>
 #include <vector>

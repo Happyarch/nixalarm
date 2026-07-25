@@ -17,36 +17,26 @@
 #include "dial_scene.h"
 #include "types.h"
 
-// What the dial is made to READ. A dial left to itself tells apparent solar
-// time: the sun's own time, which runs ahead of and behind the clock by up to
-// a quarter of an hour over the year and is offset again by where you sit in
-// your time zone. The corrected modes force the shadow onto the hour line for
-// the time you actually want, by rendering the light at the hour angle a sun
-// keeping that time would have. Declination is left alone, so shadows keep
-// their real seasonal length -- it is the same trick a heliochronometer plays
-// mechanically.
+// What the dial is made to read. Uncorrected it tells apparent solar time; the
+// corrected modes render the light at the hour angle a sun keeping the wanted
+// time would have, which puts the shadow on that hour's line. Declination is
+// untouched, so shadows keep their real seasonal length.
 enum class DialTimebase {
   // Uncorrected. The instrument a real dial is.
   Apparent,
-  // Apparent minus the equation of time: local mean solar time. Noon here is
-  // the average of the sun's noons over the year, at YOUR longitude -- which
-  // is still not your wall clock unless you happen to sit on your zone's
-  // standard meridian and keep no daylight saving.
+  // Apparent minus the equation of time: local mean solar time. Keyed to the
+  // observer's longitude, so it still won't match a wall clock off the zone's
+  // standard meridian, or under DST.
   Mean,
-  // Local mean time carried the rest of the way to civil time. Taken from the
-  // system clock rather than computed, so the zone's own rules and daylight
-  // saving come along for free.
+  // Civil time, taken from the system clock, so zone rules and DST come free.
   Clock,
 };
 
 enum class DialMode {
-  // Pinned. The dial never changes out from under you; it simply goes dark
-  // when its own light is gone, the way the real instrument in a garden does.
+  // Pinned: the dial never changes, and goes dark when its own light is gone.
   SunOnly,
   MoonOnly,
-  // Follows the sky: whichever dial can currently be read is the one shown,
-  // crossfading from one to the other at the changeover. A dial that goes
-  // blank at dusk is a dead clock, and this is the mode that fixes that.
+  // Shows whichever dial can currently be read, crossfading at the changeover.
   Auto,
 };
 

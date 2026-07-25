@@ -1,18 +1,14 @@
 #pragma once
 
-// What time a dial READS, and what it takes to make it read something else.
+// What time a dial reads, and what it takes to make it read something else.
 //
-// Left alone, a sundial tells apparent solar time -- the sun's own time, which
-// runs ahead of and behind a clock by up to about a quarter of an hour over
-// the year (the equation of time), and is offset again by where the observer
-// sits relative to their time zone's standard meridian. Correcting for that is
-// what a heliochronometer does mechanically; here it is a shift applied to the
-// light's hour angle, which is the one quantity the hour lines are a function
-// of, so the shadow moves along the plate by exactly the correction and
-// nothing else about the scene changes.
+// Uncorrected, a sundial tells apparent solar time: off a clock by up to ~16
+// minutes over the year (the equation of time), plus the observer's offset
+// from their zone's standard meridian. The correction is a shift applied to
+// the light's hour angle -- the one quantity the hour lines are a function of
+// -- so the shadow moves by exactly the correction and nothing else changes.
 //
-// Pure time/angle math with no rendering or SDL dependency, so it is testable
-// without a window -- same rationale as dial_scene and dial_engrave.
+// No rendering or SDL dependency, so it is testable without a window.
 
 #include "astro.h"
 

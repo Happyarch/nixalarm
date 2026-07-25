@@ -115,11 +115,9 @@ static Source make_sdr(double mhz) {
 static std::map<std::string, Source> builtin_sources() {
   std::map<std::string, Source> m;
   m["generated"] = Source{};
-  // One preset per US NOAA weather-band channel, and nothing tied to any
-  // particular transmitter or region: which channel reaches you depends on
-  // where you are, so that is the user's to choose, not ours to assume. An
-  // internet mirror for a specific station goes in the config as a
-  // [sources.NAME] of type "internet".
+  // One preset per US NOAA weather-band channel. No transmitter-specific
+  // presets: coverage depends on the user's location. Station streams go in
+  // the config as an "internet" source.
   for (double f : {162.400, 162.425, 162.450, 162.475, 162.500, 162.525, 162.550}) {
     std::ostringstream name;
     name << "weatherband_" << std::fixed << std::setprecision(3) << f;
