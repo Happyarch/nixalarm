@@ -138,10 +138,8 @@ void test_boundaries_are_rays_not_lines_through_the_foot() {
   }
 }
 
-// The dial is read as bands: the lines are boundaries at the half hours and
-// each numeral sits in the middle of the band between two of them. A numeral
-// sitting ON a line would be ambiguous -- it is the whole point of the layout
-// that it does not.
+// The dial is read as bands: lines are boundaries at the half hours, and each
+// numeral sits between two of them. A numeral on a line would be ambiguous.
 void test_numerals_sit_between_the_boundary_lines() {
   for (bool moondial : {false, true}) {
     DialScene scene = build_test_scene(moondial);

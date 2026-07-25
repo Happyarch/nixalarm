@@ -244,9 +244,9 @@ float traceScene(vec3 ro, vec3 rd, out vec3 n, out int hitKind, out float hitRad
   return (hitKind >= 0) ? best : -1.0;
 }
 
-// Shadow ray toward the light: solid geometry fully blocks; each glass member
-// crossed only attenuates -- so the frame's cast shadows read pale and thin
-// next to the solid rod's, which is the whole point of the glass frame.
+// Shadow ray toward the light: solid geometry fully blocks, each glass member
+// crossed only attenuates, so the frame's cast shadows read pale and thin next
+// to the solid rod's.
 float shadowVisibility(vec3 p) {
   float vis = 1.0;
   vec3 n;
@@ -384,10 +384,10 @@ void main() {
       // albedo is the one place uTickColor is the actual surface color rather
       // than a fallback tint.
       //
-      // Metallic is held just under 1 on purpose: a fully-metallic thin rod
-      // keeps only the narrow band where the highlight lands and goes near
-      // black everywhere else, so the ticks vanish into the plate. Leaving a
-      // little diffuse in makes them read as aged brass at every angle.
+      // Metallic stays under 1: a fully-metallic thin rod keeps only the
+      // narrow band where the highlight lands and goes near black elsewhere,
+      // so the ticks vanish into the plate. A little diffuse reads as aged
+      // brass at every angle.
       albedo = uTickColor;
       prm = vec4(0.85, 1.0, 0.5, 0.8);
       shininessLo = 48.0;

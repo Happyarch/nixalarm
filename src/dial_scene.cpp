@@ -39,11 +39,10 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
   // Solid shadow-casting rod: dial center to the nodus, along the style edge.
   scene.rods.push_back(SceneRod{Vec3{0.0, 0.0, 0.0}, tip, rod_r, DialMaterial::Gnomon});
 
-  // Glass frame: the other two edges of the classic right triangle. Both
-  // degenerate honestly -- the vertical leg vanishes when the style lies in
-  // the plate (excluded by the optimizer's elevation floor anyway) and the
-  // base leg vanishes when the style is perpendicular to the plate (polar
-  // case, where the rod alone IS the whole triangle).
+  // Glass frame: the other two edges of the classic right triangle. Either can
+  // vanish -- the vertical leg when the style lies in the plate (ruled out by
+  // the optimizer's elevation floor), the base leg when the style is
+  // perpendicular to it (polar case, where the rod is the whole triangle).
   Vec3 foot{tip.x, tip.y, 0.0};
   double horiz = std::sqrt(tip.x * tip.x + tip.y * tip.y);
   if (horiz > 1e-9) {

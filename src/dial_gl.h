@@ -39,9 +39,9 @@ struct DialPalette {
   Vec3 plate_color;
   Vec3 gnomon_color;
   Vec3 tick_color;
-  // Both carry intensity as well as hue, and together they should sum to
-  // roughly a unit exposure for a fully-lit surface (light + ambient ~= 1)
-  // so a face doesn't blow out; the moondial deliberately sums to far less.
+  // Both carry intensity as well as hue. They should sum to roughly a unit
+  // exposure for a fully-lit surface (light + ambient ~= 1) so a face doesn't
+  // blow out; the moondial sums to far less, which is what makes it night.
   Vec3 light_color;    // direct sun/moon light
   Vec3 ambient_color;  // sky fill, attenuated by each surface's AO map
 };

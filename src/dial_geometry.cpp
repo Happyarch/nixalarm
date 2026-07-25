@@ -166,10 +166,10 @@ struct Point {
   double slant, declination;
 };
 
-// Small, self-contained 2D Nelder-Mead maximizer. The objective is a step
-// function (quantized by kHourStepDeg), so this is deliberately simple rather
-// than a fully general/robust implementation -- it only needs to polish a
-// grid-search result to sub-grid-step precision, not converge from scratch.
+// Small 2D Nelder-Mead maximizer. The objective is a step function (quantized
+// by kHourStepDeg), and this only polishes a grid-search result to sub-step
+// precision rather than converging from scratch, so it skips the robustness a
+// general implementation would need.
 Point nelder_mead_refine(double latitude_deg, double gnomon_length, double plate_radius,
                           double k_legible, bool moondial, Point start) {
   auto eval = [&](Point p) {

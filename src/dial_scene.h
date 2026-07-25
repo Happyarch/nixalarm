@@ -20,9 +20,9 @@
 // wireframe of the rest of the classic right triangle: one thin leg lying in
 // the plate from the center to the point beneath the tip, one thin leg rising
 // from there, parallel to the plate normal, up to the tip. The full triangle
-// silhouette still explains the tilt structurally, but only its skeleton
-// edges are drawn -- and in glass, so the frame's cast shadows read obviously
-// thinner/fainter than the solid rod's.
+// silhouette still explains the tilt structurally, but only its skeleton edges
+// are drawn, and in glass, so the frame's cast shadows read thinner and
+// fainter than the solid rod's.
 
 #include <vector>
 

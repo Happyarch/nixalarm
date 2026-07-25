@@ -37,14 +37,12 @@ constexpr DialPalette kSunPalette{
     Vec3{0.20, 0.22, 0.27},  // sky fill
 };
 
-// The moon dial's night palette. Same staged bitmap maps as the sun dial (the
-// two forms share assets/runtime/dial/), so what makes this one read as NIGHT
-// is the light grade, not different textures: the surface tints are the cool
-// counterpart of the sun dial's -- pale grey stone, tarnished silver gnomon,
-// dew-dark grass -- and the ticks are cool pewter. Moonlight is deliberately
-// about a third of the sun dial's exposure, bright enough to cast the sharp
-// gnomon shadow the face is FOR and nothing more. The near-black sky fill is
-// what sells it: unlit surfaces fall almost to silhouette.
+// The moon dial's night palette. Both forms share assets/runtime/dial/, so the
+// light grade is what makes this one read as night, not different textures.
+// The tints are the cool counterpart of the sun dial's: pale grey stone,
+// tarnished silver gnomon, dew-dark grass, pewter ticks. Moonlight runs about
+// a third of the sun dial's exposure -- enough for a sharp gnomon shadow and
+// no more -- and the near-black sky fill drops unlit surfaces to silhouette.
 constexpr DialPalette kMoonPalette{
     Vec3{0.16, 0.24, 0.18},  // ground
     Vec3{0.48, 0.50, 0.54},  // plate
@@ -179,13 +177,10 @@ void DialClockFace::update_form_choice(double jd, double now_seconds, double civ
 
 void DialClockFace::render(SDL_Window* win, SDL_Renderer* /*r*/, int ww, int wh, const Config& cfg,
                             const RingState& /*ring*/) {
-  // The dial faces deliberately draw NO alarm-ringing indicator: the flash /
-  // progress overlay the other faces render (see SevenSegmentClock/NixieClock/
-  // AnalogClock) would have to be either extra GL geometry or a 2D
-  // SDL_Renderer pass composited after SDL_GL_SwapWindow, and a flat rectangle
-  // slapped over a raytraced scene looks wrong. A dial-native indicator is
-  // planned instead; until then a ringing alarm is signalled by sound alone,
-  // exactly as on any other face. `ring` is unused for that reason.
+  // No ringing indicator here, hence the unused `ring`. The overlay the other
+  // faces draw would need extra GL geometry or a 2D SDL_Renderer pass after
+  // SDL_GL_SwapWindow; a dial-native indicator is planned instead. Until then
+  // a ringing alarm is signalled by sound.
   std::time_t now = std::time(nullptr);
   std::tm utc_tm{};
   gmtime_r(&now, &utc_tm);

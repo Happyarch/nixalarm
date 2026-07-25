@@ -1,10 +1,9 @@
 #pragma once
 
-// Small reusable OpenGL + matrix helpers, extracted from the dial renderer so
-// future GL-based themes/faces don't re-implement them. Deliberately tiny:
-// this project doesn't want a rendering framework, just the handful of
-// primitives every GL face needs (shader building, a fixed-camera MVP, and
-// procedural-texture upload).
+// Small OpenGL + matrix helpers, extracted from the dial renderer so future
+// GL-based faces don't re-implement them. Scope is the few primitives every GL
+// face needs -- shader building, a fixed-camera MVP, procedural-texture upload
+// -- not a rendering framework.
 
 #include <array>
 #include <cstdint>
