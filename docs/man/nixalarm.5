@@ -145,12 +145,21 @@ The plate tilt and hour-line spacing are optimized for that latitude at
 startup. Requires OpenGL 3.3. Does not use the color overrides below apart
 from
 .BR background ,
-which fills the area around the dial. Dark while the sun is below the horizon.
+which fills the area around the dial.
+.IP
+A dial only works while its own light is up, so this theme shows a sun dial
+and a moon dial in turn, crossfading between them. The changeover follows
+readability rather than sunset: a dial stops telling the time once the
+gnomon's shadow slides off the edge of the plate, some while before the body
+sets, and the moon dial takes over only if the moon is up and more than
+roughly a quarter lit. When neither dial can be read the face holds the one
+it was showing and goes dark.
 .TP
 .B moondial
-The same dial read by moonlight, in a night grade. Dark while the moon is
-below the horizon or new. Same requirements and color behavior as
-.BR sundial .
+The same pair of dials as
+.BR sundial ,
+opening on the moon dial rather than the sun dial and falling back to it when
+neither can be read. Same requirements and color behavior.
 .RE
 .TP
 .B background = "#07180b"

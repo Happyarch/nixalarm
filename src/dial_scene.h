@@ -73,3 +73,15 @@ struct DialScene {
 // rod first, then any glass frame legs, then hour tick rods.
 DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientation, double gnomon_length,
                             double plate_radius, bool moondial);
+
+// Whether this dial can be READ under the given light -- a stricter question
+// than whether the sun or moon has risen. The gnomon tip's shadow has to land
+// somewhere on the plate: as the light drops toward the plate's own horizon
+// the shadow lengthens and slides off the edge, and from that moment there is
+// no hour to read, well before the body actually sets. That crossing is the
+// honest moment to change a dial over to the other light.
+//
+// light_local: in the same plate frame as the scene, pointing FROM the
+// surface TOWARD the body (light_direction_local()'s convention); need not be
+// normalized.
+bool shadow_falls_on_plate(const DialScene& scene, Vec3 light_local);

@@ -2,6 +2,7 @@
 // external test framework, matching this project's minimal-dependency style.
 // Run via `ctest` or by executing the built binary directly.
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -81,6 +82,21 @@ void test_astro_sanity() {
 
   double lst = local_sidereal_time_hours(jd, 0.0);
   expect_true(lst >= 0.0 && lst < 24.0, "local sidereal time in [0,24)");
+
+  // Moon phase gates the moondial: a thin crescent casts no readable shadow,
+  // so the face refuses to change over to it. Sweep a full synodic month and
+  // check the fraction stays a fraction and actually spans new to full.
+  double min_phase = 2.0, max_phase = -1.0;
+  bool in_unit_range = true;
+  for (int day = 0; day <= 30; ++day) {
+    double f = moon_illuminated_fraction(jd + static_cast<double>(day));
+    if (f < 0.0 || f > 1.0) in_unit_range = false;
+    min_phase = std::min(min_phase, f);
+    max_phase = std::max(max_phase, f);
+  }
+  expect_true(in_unit_range, "illuminated fraction stays within [0,1]");
+  expect_true(min_phase < 0.05, "a synodic month reaches new moon");
+  expect_true(max_phase > 0.95, "a synodic month reaches full moon");
 
   // An object with dec=0 crossing the meridian (H=0) culminates at altitude
   // = 90 - |lat - dec| = 90 - lat here; at lat=0 (equator) that's the zenith.

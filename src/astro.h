@@ -50,3 +50,9 @@ double local_sidereal_time_hours(double jd, double longitude_deg);
 // Converts an equatorial coordinate to horizontal (az/alt) for an observer at
 // the given latitude and local sidereal time.
 HorizontalCoord equatorial_to_horizontal(EquatorialCoord eq, double lat_deg, double lst_hours);
+
+// Fraction of the Moon's disc that is lit, 0 (new) to 1 (full), from the
+// Sun-Moon elongation as seen from Earth. Geocentric and ignoring the small
+// parallax and phase-angle refinements -- enough to tell a bright gibbous from
+// a useless crescent, which is what a moondial cares about.
+double moon_illuminated_fraction(double jd);

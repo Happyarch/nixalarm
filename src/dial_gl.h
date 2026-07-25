@@ -22,6 +22,8 @@
 
 #include <SDL.h>
 
+#include <vector>
+
 #include "dial_geometry.h"
 #include "dial_scene.h"
 
@@ -51,18 +53,28 @@ class DialGlRenderer {
   DialGlRenderer(const DialGlRenderer&) = delete;
   DialGlRenderer& operator=(const DialGlRenderer&) = delete;
 
-  // Lazily creates the GL context/shaders on the first call (the window
-  // doesn't exist yet when the owning ClockFace is constructed, so this can't
-  // happen in a constructor -- mirrors NixieClock's lazy asset loading). The
-  // scene's primitives are uploaded as uniforms on that first call only; the
-  // dial's geometry is fixed after startup, so only the light direction and
-  // viewport change per frame.
+  // A frame is begin_frame / one or more draw() / end_frame. More than one
+  // draw exists for the day/night changeover: the sun dial and the moon dial
+  // are different plates, so the only way from one to the other is to draw
+  // both and crossfade, which means a frame may carry two scenes.
+  //
+  // begin_frame lazily creates the GL context/shaders on the first call (the
+  // window doesn't exist yet when the owning ClockFace is constructed, so this
+  // can't happen in a constructor -- mirrors NixieClock's lazy asset loading).
+  // It returns false if the context could not be created, in which case the
+  // caller should skip the frame entirely.
+  bool begin_frame(SDL_Window* win, int ww, int wh);
+
+  // Traces one dial over the whole viewport. `opacity` is the alpha the frame
+  // is blended at: draw the base dial at 1, then any dial fading in over it.
   //
   // light_dir_local: unit vector in the plate-local frame, pointing FROM the
   // surface TOWARD the sun/moon (light_direction_local()'s convention).
   // Colors are linear RGB in [0,1].
-  void render(SDL_Window* win, int ww, int wh, const DialScene& scene, const FixedCameraOffset& camera,
-              Vec3 light_dir_local, const DialPalette& palette, Vec3 background_color);
+  void draw(const DialScene& scene, const FixedCameraOffset& camera, Vec3 light_dir_local,
+            const DialPalette& palette, Vec3 background_color, float opacity);
+
+  void end_frame(SDL_Window* win);
 
   // The shader's fixed uniform-array capacity for scene rods. Scenes larger
   // than this are truncated with a warning (never expected: gnomon + 2 glass
@@ -70,7 +82,8 @@ class DialGlRenderer {
   static constexpr int kMaxRods = 32;
 
  private:
-  void ensure_initialized(SDL_Window* win, const DialScene& scene, const DialPalette& palette);
+  void ensure_initialized(SDL_Window* win);
+  unsigned engraving_for(const DialScene& scene);
 
   bool initialized_ = false;
   SDL_GLContext gl_context_ = nullptr;
@@ -85,13 +98,21 @@ class DialGlRenderer {
   unsigned texture_plate_diffuse_ = 0, texture_plate_normal_ = 0, texture_plate_params_ = 0;
   unsigned texture_ground_diffuse_ = 0, texture_ground_normal_ = 0, texture_ground_params_ = 0;
   unsigned texture_gnomon_diffuse_ = 0, texture_gnomon_normal_ = 0, texture_gnomon_params_ = 0;
-  // The engraved Roman hour numerals (src/dial_engrave.h). Generated from the
-  // scene at startup rather than loaded: which numerals land where depends on
-  // the orientation the optimizer chose for the configured latitude, so this
-  // one can't ship as a bitmap. Unit 9, clamped, single channel.
-  unsigned texture_plate_engrave_ = 0;
+  // The engraved Roman hour numerals (src/dial_engrave.h), one map per scene.
+  // Generated rather than loaded: which numerals land where depends on the
+  // orientation the optimizer chose for the configured latitude, so these
+  // can't ship as bitmaps. Bound to unit 9, clamped, single channel. Kept as
+  // a cache because a crossfade frame alternates between two scenes and
+  // rasterizing a 1024-square map per draw is out of the question.
+  struct EngravingSlot {
+    const DialScene* scene = nullptr;
+    unsigned texture = 0;
+  };
+  std::vector<EngravingSlot> engraving_slots_;
   int uniform_eye_ = -1, uniform_right_ = -1, uniform_up_ = -1, uniform_forward_ = -1;
   int uniform_half_extent_ = -1;
   int uniform_light_dir_ = -1;
   int uniform_background_ = -1;
+  int uniform_opacity_ = -1;
+  int viewport_w_ = 0, viewport_h_ = 0;
 };

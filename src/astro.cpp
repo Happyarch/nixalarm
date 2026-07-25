@@ -172,3 +172,18 @@ HorizontalCoord equatorial_to_horizontal(EquatorialCoord eq, double lat_deg, dou
 
   return HorizontalCoord{az_deg, rad2deg(alt_rad)};
 }
+
+double moon_illuminated_fraction(double jd) {
+  EquatorialCoord moon = lunar_position(jd);
+  EquatorialCoord sun = solar_position_full(jd).eq;
+
+  // Angular separation of the two bodies on the sky. At elongation 0 the Moon
+  // sits with the Sun and is new; at 180 it is opposite and full, so the lit
+  // fraction is (1 - cos elongation) / 2.
+  double dec_m = deg2rad(moon.dec_deg), dec_s = deg2rad(sun.dec_deg);
+  double d_ra = deg2rad(moon.ra_deg - sun.ra_deg);
+  double cos_elong =
+      std::sin(dec_m) * std::sin(dec_s) + std::cos(dec_m) * std::cos(dec_s) * std::cos(d_ra);
+  cos_elong = std::clamp(cos_elong, -1.0, 1.0);
+  return 0.5 * (1.0 - cos_elong);
+}

@@ -60,6 +60,11 @@ uniform vec3 uForward;
 uniform vec2 uHalfExtent;
 uniform vec3 uLightDir;     // unit, local frame, surface -> light
 uniform vec3 uBackground;
+// Whole-frame alpha. 1 for an ordinary frame; during the day/night changeover
+// the outgoing dial is drawn opaque and the incoming one over it at a rising
+// alpha, which crossfades the two (they are different plates, so there is no
+// way to interpolate between them geometrically).
+uniform float uOpacity;
 
 uniform vec3 uGroundColor;
 uniform vec3 uPlateColor;
@@ -404,7 +409,7 @@ void main() {
                            specTint * spec * vis * daylight * uLightColor);
     break;
   }
-  FragColor = vec4(color, 1.0);
+  FragColor = vec4(color, uOpacity);
 }
 )GLSL";
 
@@ -509,7 +514,7 @@ DialGlRenderer::~DialGlRenderer() {
   if (gl_context_) SDL_GL_DeleteContext(gl_context_);
 }
 
-void DialGlRenderer::ensure_initialized(SDL_Window* win, const DialScene& scene, const DialPalette& palette) {
+void DialGlRenderer::ensure_initialized(SDL_Window* win) {
   if (initialized_) return;
   gl_context_ = SDL_GL_CreateContext(win);
   if (!gl_context_) {
@@ -527,44 +532,10 @@ void DialGlRenderer::ensure_initialized(SDL_Window* win, const DialScene& scene,
   uniform_half_extent_ = glGetUniformLocation(program_, "uHalfExtent");
   uniform_light_dir_ = glGetUniformLocation(program_, "uLightDir");
   uniform_background_ = glGetUniformLocation(program_, "uBackground");
+  uniform_opacity_ = glGetUniformLocation(program_, "uOpacity");
   glGenVertexArrays(1, &trace_vao_);
 
-  // Scene + material uniforms are static after startup: upload once here.
   glUseProgram(program_);
-  auto set3 = [&](const char* name, Vec3 v) {
-    glUniform3f(glGetUniformLocation(program_, name), static_cast<float>(v.x), static_cast<float>(v.y),
-                static_cast<float>(v.z));
-  };
-  set3("uGroundColor", palette.ground_color);
-  set3("uPlateColor", palette.plate_color);
-  set3("uGnomonColor", palette.gnomon_color);
-  set3("uTickColor", palette.tick_color);
-  set3("uLightColor", palette.light_color);
-  set3("uAmbientColor", palette.ambient_color);
-  glUniform1f(glGetUniformLocation(program_, "uPlateRadius"), static_cast<float>(scene.plate_radius));
-  glUniform1f(glGetUniformLocation(program_, "uPlateThickness"), static_cast<float>(scene.plate_thickness));
-  glUniform1f(glGetUniformLocation(program_, "uGroundZ"), static_cast<float>(scene.ground_z));
-
-  int count = static_cast<int>(scene.rods.size());
-  if (count > kMaxRods) {
-    std::fprintf(stderr, "nixalarm: dial scene has %d rods; truncating to %d\n", count, kMaxRods);
-    count = kMaxRods;
-  }
-  std::array<float, kMaxRods * 4> rod_a{}, rod_b{};
-  for (int i = 0; i < count; ++i) {
-    const SceneRod& r = scene.rods[static_cast<size_t>(i)];
-    rod_a[i * 4 + 0] = static_cast<float>(r.a.x);
-    rod_a[i * 4 + 1] = static_cast<float>(r.a.y);
-    rod_a[i * 4 + 2] = static_cast<float>(r.a.z);
-    rod_a[i * 4 + 3] = static_cast<float>(r.radius);
-    rod_b[i * 4 + 0] = static_cast<float>(r.b.x);
-    rod_b[i * 4 + 1] = static_cast<float>(r.b.y);
-    rod_b[i * 4 + 2] = static_cast<float>(r.b.z);
-    rod_b[i * 4 + 3] = static_cast<float>(static_cast<int>(r.material));
-  }
-  glUniform1i(glGetUniformLocation(program_, "uRodCount"), count);
-  glUniform4fv(glGetUniformLocation(program_, "uRodA"), kMaxRods, rod_a.data());
-  glUniform4fv(glGetUniformLocation(program_, "uRodB"), kMaxRods, rod_b.data());
 
   // Surface maps: user-provided bitmaps from assets/runtime/dial/ (or the
   // installed data dir / NIXALARM_ASSET_DIR) when staged, procedural
@@ -621,30 +592,51 @@ void DialGlRenderer::ensure_initialized(SDL_Window* win, const DialScene& scene,
   // square texture ~5x along the axis to keep texels roughly isotropic.
   glUniform2f(glGetUniformLocation(program_, "uGnomonUvScale"), 1.0f, 5.0f);
 
-  // The engraved hour numerals. Generated from the scene rather than loaded,
-  // because where they land depends on the orientation the optimizer picked
-  // for this latitude, so no shippable bitmap could be correct everywhere.
-  EngravingMap engraving = build_hour_numeral_engraving(scene, kEngravingMapSize);
-  texture_plate_engrave_ = glutil::upload_texture_r8_clamped(engraving.depth.data(), engraving.size, engraving.size);
   glUniform1i(glGetUniformLocation(program_, "uPlateEngrave"), 9);
 
-  // The tracer composites glass in-shader, but blending stays enabled for
-  // any rasterized overlay a future pass might draw on top of the traced
-  // frame.
+  // The glass is composited in-shader, but blending is what makes the
+  // day/night crossfade work: the incoming dial is drawn over the outgoing
+  // one at a rising alpha.
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   initialized_ = true;
 }
 
-void DialGlRenderer::render(SDL_Window* win, int ww, int wh, const DialScene& scene,
-                             const FixedCameraOffset& camera, Vec3 light_dir_local, const DialPalette& palette,
-                             Vec3 background_color) {
-  ensure_initialized(win, scene, palette);
-  if (!gl_context_) return;
-  SDL_GL_MakeCurrent(win, gl_context_);
+// The numeral engraving is the one per-scene GPU resource, and rebuilding it
+// means rasterizing a 1024-square map -- far too expensive to redo per frame
+// while a crossfade alternates between two scenes. There are only ever two
+// scenes alive (the sun dial and the moon dial), so a tiny cache keyed on the
+// scene's address holds both for the life of the renderer.
+unsigned DialGlRenderer::engraving_for(const DialScene& scene) {
+  for (const EngravingSlot& slot : engraving_slots_) {
+    if (slot.scene == &scene) return slot.texture;
+  }
+  EngravingMap engraving = build_hour_numeral_engraving(scene, kEngravingMapSize);
+  unsigned tex = glutil::upload_texture_r8_clamped(engraving.depth.data(), engraving.size, engraving.size);
+  engraving_slots_.push_back(EngravingSlot{&scene, tex});
+  return tex;
+}
 
+bool DialGlRenderer::begin_frame(SDL_Window* win, int ww, int wh) {
+  ensure_initialized(win);
+  if (!gl_context_) return false;
+  SDL_GL_MakeCurrent(win, gl_context_);
   glViewport(0, 0, ww, wh);
   glDisable(GL_DEPTH_TEST);  // the tracer resolves visibility itself
+  viewport_w_ = ww;
+  viewport_h_ = wh;
+  return true;
+}
+
+void DialGlRenderer::end_frame(SDL_Window* win) {
+  if (!gl_context_) return;
+  SDL_GL_SwapWindow(win);
+}
+
+void DialGlRenderer::draw(const DialScene& scene, const FixedCameraOffset& camera, Vec3 light_dir_local,
+                           const DialPalette& palette, Vec3 background_color, float opacity) {
+  if (!gl_context_) return;
+  int ww = viewport_w_, wh = viewport_h_;
 
   // Orthographic camera basis, identical to the old mat4_look_at-derived one.
   Vec3 eye = camera.position_in_plate_frame;
@@ -672,6 +664,45 @@ void DialGlRenderer::render(SDL_Window* win, int ww, int wh, const DialScene& sc
   glUniform2f(uniform_half_extent_, half_w, half_h);
   set3(uniform_light_dir_, normalize(light_dir_local));
   set3(uniform_background_, background_color);
+  glUniform1f(uniform_opacity_, opacity);
+
+  // Scene and palette go up per draw rather than once at startup: a crossfade
+  // frame draws two different dials, so neither can be baked into the program
+  // state. It's a few dozen uniform calls against a full-screen trace.
+  auto set3_named = [&](const char* name, Vec3 v) {
+    glUniform3f(glGetUniformLocation(program_, name), static_cast<float>(v.x), static_cast<float>(v.y),
+                static_cast<float>(v.z));
+  };
+  set3_named("uGroundColor", palette.ground_color);
+  set3_named("uPlateColor", palette.plate_color);
+  set3_named("uGnomonColor", palette.gnomon_color);
+  set3_named("uTickColor", palette.tick_color);
+  set3_named("uLightColor", palette.light_color);
+  set3_named("uAmbientColor", palette.ambient_color);
+  glUniform1f(glGetUniformLocation(program_, "uPlateRadius"), static_cast<float>(scene.plate_radius));
+  glUniform1f(glGetUniformLocation(program_, "uPlateThickness"), static_cast<float>(scene.plate_thickness));
+  glUniform1f(glGetUniformLocation(program_, "uGroundZ"), static_cast<float>(scene.ground_z));
+
+  int count = static_cast<int>(scene.rods.size());
+  if (count > kMaxRods) {
+    std::fprintf(stderr, "nixalarm: dial scene has %d rods; truncating to %d\n", count, kMaxRods);
+    count = kMaxRods;
+  }
+  std::array<float, kMaxRods * 4> rod_a{}, rod_b{};
+  for (int i = 0; i < count; ++i) {
+    const SceneRod& r = scene.rods[static_cast<size_t>(i)];
+    rod_a[i * 4 + 0] = static_cast<float>(r.a.x);
+    rod_a[i * 4 + 1] = static_cast<float>(r.a.y);
+    rod_a[i * 4 + 2] = static_cast<float>(r.a.z);
+    rod_a[i * 4 + 3] = static_cast<float>(r.radius);
+    rod_b[i * 4 + 0] = static_cast<float>(r.b.x);
+    rod_b[i * 4 + 1] = static_cast<float>(r.b.y);
+    rod_b[i * 4 + 2] = static_cast<float>(r.b.z);
+    rod_b[i * 4 + 3] = static_cast<float>(static_cast<int>(r.material));
+  }
+  glUniform1i(glGetUniformLocation(program_, "uRodCount"), count);
+  glUniform4fv(glGetUniformLocation(program_, "uRodA"), kMaxRods, rod_a.data());
+  glUniform4fv(glGetUniformLocation(program_, "uRodB"), kMaxRods, rod_b.data());
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texture_plate_diffuse_);
@@ -692,10 +723,8 @@ void DialGlRenderer::render(SDL_Window* win, int ww, int wh, const DialScene& sc
   glActiveTexture(GL_TEXTURE8);
   glBindTexture(GL_TEXTURE_2D, texture_ground_params_);
   glActiveTexture(GL_TEXTURE9);
-  glBindTexture(GL_TEXTURE_2D, texture_plate_engrave_);
+  glBindTexture(GL_TEXTURE_2D, engraving_for(scene));
 
   glBindVertexArray(trace_vao_);
   glDrawArrays(GL_TRIANGLES, 0, 3);
-
-  SDL_GL_SwapWindow(win);
 }

@@ -69,6 +69,38 @@ void test_scene_layout() {
   expect_true(ticks_in_radius, "tick rods stay within the plate radius");
 }
 
+// The dial faces change over from sun to moon when the current dial stops
+// being readable, so this predicate decides when that happens. It must key on
+// the shadow leaving the plate, NOT on the light merely being above the
+// horizon -- the shadow runs off the edge well before the body sets.
+void test_readability_follows_the_shadow_off_the_plate() {
+  DialScene scene = build_test_scene(false);
+
+  // Straight down the plate normal: the shadow is as short as it gets.
+  expect_true(shadow_falls_on_plate(scene, Vec3{0.0, 0.0, 1.0}), "overhead light is readable");
+
+  // Below the plate's own horizon, and exactly along it: no shadow at all.
+  expect_true(!shadow_falls_on_plate(scene, Vec3{0.3, 0.0, -0.5}), "light below the plate horizon is unreadable");
+  expect_true(!shadow_falls_on_plate(scene, Vec3{1.0, 0.0, 0.0}), "light along the plate plane is unreadable");
+
+  // Sweeping the light down from the zenith toward the horizon, readability
+  // must fail once and stay failed -- if it flickered the face would flap
+  // between dials.
+  const Vec3& tip = scene.gnomon_tip_local;
+  bool seen_unreadable = false, flapped = false;
+  for (int i = 0; i <= 200; ++i) {
+    double elevation = 90.0 - 90.0 * (static_cast<double>(i) / 200.0);
+    double e = elevation * 3.14159265358979323846 / 180.0;
+    // Sweep on the side the tip leans toward, so the shadow runs outward.
+    Vec3 light{-std::cos(e) * (tip.x >= 0.0 ? 1.0 : -1.0), 0.0, std::sin(e)};
+    bool readable = shadow_falls_on_plate(scene, light);
+    if (!readable) seen_unreadable = true;
+    else if (seen_unreadable) flapped = true;
+  }
+  expect_true(seen_unreadable, "a low enough light pushes the shadow off the plate");
+  expect_true(!flapped, "readability fails once as the light descends, and stays failed");
+}
+
 // The user-specified triangle: the solid rod is the hypotenuse from the dial
 // center to the tip; the glass frame is the other two edges -- one leg lying
 // IN the plate plane out to the point beneath the tip, one leg parallel to
@@ -119,6 +151,7 @@ int main() {
   test_scene_layout();
   test_gnomon_rod_and_glass_frame_form_right_triangle();
   test_moondial_also_produces_scene();
+  test_readability_follows_the_shadow_off_the_plate();
 
   if (g_failures > 0) {
     std::fprintf(stderr, "\n%d test(s) FAILED\n", g_failures);

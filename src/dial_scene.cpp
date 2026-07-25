@@ -83,3 +83,15 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
 
   return scene;
 }
+
+bool shadow_falls_on_plate(const DialScene& scene, Vec3 light_local) {
+  Vec3 light = normalize(light_local);
+  if (light.z <= 1e-4) return false;  // at or below the plate's own horizon: no shadow at all
+
+  // Walk from the tip directly away from the light until the plate plane.
+  const Vec3& tip = scene.gnomon_tip_local;
+  double t = tip.z / light.z;
+  double sx = tip.x - light.x * t;
+  double sy = tip.y - light.y * t;
+  return std::sqrt(sx * sx + sy * sy) <= scene.plate_radius;
+}
