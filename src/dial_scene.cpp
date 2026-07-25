@@ -1,5 +1,6 @@
 #include "dial_scene.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -62,16 +63,26 @@ DialScene build_dial_scene(double latitude_deg, const DialOrientation& orientati
     ShadowSample s = shadow_point_on_plate(latitude_deg, frame, gnomon_length, h, moondial);
     if (!s.valid) continue;
     double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
-    if (len > plate_radius) continue;  // shadow off the edge of the plate at this hour
     if (len < 1e-9) continue;
     // Use the actual finite shadow point's direction (not hour_line_direction,
     // which only gives an undirected line) so the tick lands on the correct
     // side of the noon/midnight line, not its 180-degree mirror.
     Vec2 dir{s.point_local.x / len, s.point_local.y / len};
+
+    // The hour line is CLIPPED to the plate, never dropped for being long.
+    // What names the hour is the line's direction, not how far along it the
+    // tip's shadow happens to reach; morning and evening shadows run many
+    // plate-radii out, and discarding those hours cost the dial its whole
+    // early and late range. So every hour the light is up gets its line, and
+    // the line simply ends where the shadow does or where the stone does,
+    // whichever comes first -- which is also why the lines vary in length,
+    // shortest around noon when the shadow is shortest.
+    double r_end = std::min(len, r_outer);
+    if (r_end <= r_inner) continue;  // shadow that short never reaches the ring
     // Centered on the plate surface, so half the capsule stands proud of it
     // as a raised ridge the tracer can shade and shadow like everything else.
     scene.rods.push_back(SceneRod{Vec3{dir.x * r_inner, dir.y * r_inner, 0.0},
-                                   Vec3{dir.x * r_outer, dir.y * r_outer, 0.0}, tick_r, DialMaterial::Tick});
+                                   Vec3{dir.x * r_end, dir.y * r_end, 0.0}, tick_r, DialMaterial::Tick});
 
     // h is the hour angle from the dial's own noon (midnight for a moondial),
     // 15 degrees per hour, so the clock hour is 12 + h/15 -- folded onto the

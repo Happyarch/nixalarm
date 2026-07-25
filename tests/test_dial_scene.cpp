@@ -1,6 +1,7 @@
 // Standalone assert-based tests for dial_scene.cpp -- matches this project's
 // minimal-dependency test style (see tests/test_dial_geometry.cpp).
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -67,6 +68,45 @@ void test_scene_layout() {
   }
   expect_true(ticks_on_plate, "tick rods lie on the plate surface (z=0 centerline)");
   expect_true(ticks_in_radius, "tick rods stay within the plate radius");
+}
+
+// An hour line is named by its DIRECTION; how far along it the gnomon tip's
+// shadow happens to reach is incidental. Morning and evening shadows run many
+// plate-radii out, and an earlier version dropped those hours entirely for
+// being "off the plate" -- which silently cost the dial its whole early and
+// late range, leaving a stub of midday hours. Every hour whose light is up and
+// whose shadow direction is defined must get a line, clipped to the stone.
+void test_long_shadows_are_clipped_not_dropped() {
+  const double kLat = 35.0;
+  DialOrientation orientation = optimize_dial_orientation(kLat, kDefaultGnomonLength, kDefaultPlateRadius,
+                                                            kDefaultLegibleRatio, false);
+  PlateFrame frame = substyle_aligned_plate_frame(kLat, orientation.slant_deg, orientation.declination_deg);
+  DialScene scene = build_dial_scene(kLat, orientation, kDefaultGnomonLength, kDefaultPlateRadius, false);
+
+  size_t expected = 0, overrunning = 0;
+  for (double h = -165.0; h <= 165.0; h += 15.0) {
+    if (idealized_light_direction_world(kLat, h, false).z <= 0.0) continue;
+    ShadowSample s = shadow_point_on_plate(kLat, frame, kDefaultGnomonLength, h, false);
+    if (!s.valid) continue;
+    double len = std::sqrt(s.point_local.x * s.point_local.x + s.point_local.y * s.point_local.y);
+    if (len < 1e-9) continue;
+    ++expected;
+    if (len > scene.plate_radius) ++overrunning;
+  }
+  expect_true(overrunning > 0, "this latitude really does have hours whose shadow overruns the plate");
+  expect_true(scene.hour_marks.size() == expected, "every hour with a usable light direction gets a mark");
+
+  // Clipping is what makes that possible, so the lines must differ in length:
+  // shortest around noon, running to the rim early and late.
+  double shortest = 1e9, longest = 0.0;
+  for (const SceneRod& t : scene.rods) {
+    if (t.material != DialMaterial::Tick) continue;
+    double end = std::sqrt(t.b.x * t.b.x + t.b.y * t.b.y);
+    shortest = std::min(shortest, end);
+    longest = std::max(longest, end);
+  }
+  expect_true(longest > shortest + 1e-6, "hour lines vary in length rather than all reaching the same radius");
+  expect_true(longest <= scene.plate_radius, "the longest hour line is still clipped to the plate");
 }
 
 // The dial faces change over from sun to moon when the current dial stops
@@ -151,6 +191,7 @@ int main() {
   test_scene_layout();
   test_gnomon_rod_and_glass_frame_form_right_triangle();
   test_moondial_also_produces_scene();
+  test_long_shadows_are_clipped_not_dropped();
   test_readability_follows_the_shadow_off_the_plate();
 
   if (g_failures > 0) {
