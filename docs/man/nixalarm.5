@@ -281,14 +281,50 @@ is omitted,
 .B nixalarm
 tries a few common system SoundFont paths. If no SoundFont can be found, the
 source fails and the configured fallback source is used.
-.SS RTL-SDR weather-band source
+.SS RTL-SDR source
 .EX
 [sources.weather_sdr]
-type = "sdr_weatherband"
+type = "sdr"
+modulation = "nbfm"
 frequency_mhz = 162.400
 device_index = 0
 gain = "auto"
+
+[sources.broadcast_fm]
+type = "sdr"
+modulation = "wbfm"
+frequency_mhz = 100.100
+
+[sources.broadcast_am]
+type = "sdr"
+modulation = "am"
+frequency_mhz = 1.053
+direct_sampling = true
 .EE
+.PP
+The frequencies above are arbitrary placeholders, not recommendations.
+.B modulation
+selects the demodulator:
+.B nbfm
+for narrowband FM, which covers the weather band and other public-service
+channels and is the default;
+.B wbfm
+for wideband FM, meaning ordinary broadcast radio; and
+.B am
+for the broadcast and shortwave bands. Broadcast FM tuned as
+.B nbfm
+arrives as noise or near-silence, since it is a wideband signal.
+.PP
+.B direct_sampling
+enables the tuner's direct-sampling branch, which a bare RTL-SDR needs to reach
+anything below roughly 24 MHz, the AM broadcast band included. An upconverter
+does the same job in hardware.
+.PP
+.B type = "sdr_weatherband"
+is still accepted and means
+.B type = "sdr"
+with
+.BR nbfm .
 .PP
 SDR sources require RTL-SDR hardware and the
 .BR rtl_fm (1)

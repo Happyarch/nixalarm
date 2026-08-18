@@ -11,7 +11,13 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
+#include <poll.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -54,7 +60,7 @@ void AudioPlayer::start(Source source, const std::string& fallback, const std::m
     else if (source.type == SourceType::File) ok = play_ffmpeg(source.path);
     else if (source.type == SourceType::Internet) ok = play_ffmpeg(source.url);
     else if (source.type == SourceType::Midi) ok = play_midi(source);
-    else if (source.type == SourceType::SdrWeatherband) ok = play_sdr(source);
+    else if (source.type == SourceType::Sdr) ok = play_sdr(source);
     if (!ok && !stopping_) {
       auto it = all.find(fallback);
       if (it != all.end()) {
@@ -64,7 +70,7 @@ void AudioPlayer::start(Source source, const std::string& fallback, const std::m
         else if (fb.type == SourceType::File) play_ffmpeg(fb.path);
         else if (fb.type == SourceType::Internet) play_ffmpeg(fb.url);
         else if (fb.type == SourceType::Midi) play_midi(fb);
-        else if (fb.type == SourceType::SdrWeatherband) play_sdr(fb);
+        else if (fb.type == SourceType::Sdr) play_sdr(fb);
       } else {
         play_generated();
       }
@@ -273,30 +279,130 @@ bool AudioPlayer::source_is_file(const std::string& uri) {
 }
 
 bool AudioPlayer::play_sdr(const Source& source) {
-  std::ostringstream cmd;
-  cmd << "rtl_fm -f " << std::fixed << std::setprecision(3) << source.frequency_mhz
-      << "M -M fm -s 12000 -r " << kAudioRate << " -E deemp -d " << source.device_index;
-  if (source.gain != "auto") cmd << " -g " << source.gain;
-  cmd << " 2>/dev/null";
-  FILE* pipe = popen(cmd.str().c_str(), "r");
-  if (!pipe) {
-    std::cerr << "nixalarm: failed to start rtl_fm\n";
+  std::ostringstream freq;
+  // Six places so an AM channel can be named to the hertz.
+  freq << std::fixed << std::setprecision(6) << source.frequency_mhz << "M";
+  std::string rate = std::to_string(kAudioRate);
+  std::string device = std::to_string(source.device_index);
+  // Exec rtl_fm directly rather than through popen's shell: it keeps config
+  // values out of shell syntax, and it leaves us a pid we can actually signal.
+  std::vector<std::string> args{"rtl_fm", "-f", freq.str()};
+  // -M leads: rtl_fm's wbfm shortcut presets its own rates, so a later -r has to
+  // be the one that wins. wbfm brings its own de-emphasis; AM wants none.
+  switch (source.modulation) {
+    case Modulation::Wbfm:
+      args.insert(args.end(), {"-M", "wbfm"});
+      break;
+    case Modulation::Am:
+      args.insert(args.end(), {"-M", "am", "-s", "12000"});
+      break;
+    case Modulation::Nbfm:
+      args.insert(args.end(), {"-M", "fm", "-s", "12000", "-E", "deemp"});
+      break;
+  }
+  args.insert(args.end(), {"-r", rate, "-d", device});
+  if (source.direct_sampling) args.insert(args.end(), {"-E", "direct"});
+  if (source.gain != "auto") {
+    args.push_back("-g");
+    args.push_back(source.gain);
+  }
+
+  if (source.modulation == Modulation::Am && source.frequency_mhz < 24.0 && !source.direct_sampling) {
+    std::cerr << "nixalarm: " << std::fixed << std::setprecision(3) << source.frequency_mhz
+              << " MHz is under the ~24 MHz floor of a bare RTL-SDR tuner; set\n"
+                 "          direct_sampling = true on this source, or use an upconverter\n";
+  }
+  if (source.modulation == Modulation::Wbfm && source.frequency_mhz < 24.0) {
+    std::cerr << "nixalarm: wideband FM at " << std::fixed << std::setprecision(3)
+              << source.frequency_mhz << " MHz looks like an AM-band frequency; "
+                 "modulation = \"am\" is probably meant\n";
+  }
+
+  int fds[2];
+  if (pipe(fds) != 0) {
+    std::cerr << "nixalarm: could not create a pipe for rtl_fm\n";
     return false;
   }
-  std::vector<int16_t> mono(2048);
-  std::vector<int16_t> stereo(mono.size() * kAudioChannels);
-  bool played = false;
-  while (!stopping_) {
-    size_t n = fread(mono.data(), sizeof(int16_t), mono.size(), pipe);
-    if (n == 0) break;
-    for (size_t i = 0; i < n; ++i) {
-      int16_t sample = static_cast<int16_t>(std::clamp(mono[i] * volume_, -32768.0, 32767.0));
-      stereo[i * 2] = sample;
-      stereo[i * 2 + 1] = sample;
-    }
-    queue_bytes(reinterpret_cast<Uint8*>(stereo.data()), static_cast<Uint32>(n * kAudioChannels * sizeof(int16_t)));
-    played = true;
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(fds[0]);
+    close(fds[1]);
+    std::cerr << "nixalarm: could not fork for rtl_fm\n";
+    return false;
   }
-  pclose(pipe);
+  if (pid == 0) {
+    close(fds[0]);
+    dup2(fds[1], STDOUT_FILENO);
+    close(fds[1]);
+    std::vector<char*> argv;
+    for (std::string& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+    // rtl_fm keeps stderr, so its own account of a missing dongle or a busy
+    // device reaches the terminal instead of being swallowed.
+    execvp("rtl_fm", argv.data());
+    _exit(127);
+  }
+  close(fds[1]);
+  int fd = fds[0];
+
+  std::vector<uint8_t> raw(8192);
+  size_t carry = 0;
+  std::vector<int16_t> stereo;
+  bool played = false;
+  auto deadline = Clock::now() + std::chrono::seconds(source_timeout_seconds_);
+
+  while (!stopping_) {
+    pollfd pfd{fd, POLLIN, 0};
+    // Short waits rather than a blocking read: stop() joins this thread, and a
+    // dongle that opens but never delivers a sample would otherwise hang it.
+    int ready = poll(&pfd, 1, 200);
+    if (ready < 0) {
+      if (errno == EINTR) continue;
+      break;
+    }
+    if (ready == 0) {
+      if (!played && Clock::now() > deadline) {
+        std::cerr << "nixalarm: no audio from rtl_fm within " << source_timeout_seconds_
+                  << "s on " << std::fixed << std::setprecision(3) << source.frequency_mhz
+                  << " MHz (device " << source.device_index << ")\n";
+        break;
+      }
+      continue;
+    }
+    ssize_t got = read(fd, raw.data() + carry, raw.size() - carry);
+    if (got <= 0) break;
+
+    size_t avail = carry + static_cast<size_t>(got);
+    size_t frames = avail / sizeof(int16_t);
+    if (frames) {
+      const int16_t* mono = reinterpret_cast<const int16_t*>(raw.data());
+      stereo.resize(frames * kAudioChannels);
+      for (size_t i = 0; i < frames; ++i) {
+        int16_t sample = static_cast<int16_t>(std::clamp(mono[i] * volume_, -32768.0, 32767.0));
+        for (int ch = 0; ch < kAudioChannels; ++ch) stereo[i * kAudioChannels + ch] = sample;
+      }
+      queue_bytes(reinterpret_cast<Uint8*>(stereo.data()),
+                  static_cast<Uint32>(frames * kAudioChannels * sizeof(int16_t)));
+      played = true;
+    }
+    // rtl_fm writes a byte stream, so a read can split a sample in half.
+    carry = avail - frames * sizeof(int16_t);
+    if (carry) raw[0] = raw[frames * sizeof(int16_t)];
+  }
+
+  close(fd);
+  // A wedged rtl_fm never writes, so closing the pipe alone would not end it.
+  kill(pid, SIGTERM);
+  int status = 0;
+  waitpid(pid, &status, 0);
+  if (!played && !stopping_) {
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+      std::cerr << "nixalarm: rtl_fm not found on PATH. Install the rtl-sdr tools; note that a\n"
+                   "          GUI-launched app does not inherit a shell PATH, so a Homebrew\n"
+                   "          install under /opt/homebrew/bin may be visible in a terminal only.\n";
+    } else {
+      std::cerr << "nixalarm: rtl_fm produced no audio; its own messages above say why\n";
+    }
+  }
   return played;
 }

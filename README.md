@@ -198,20 +198,44 @@ type = "internet"
 url = "https://example.org/your-stream"
 
 [sources.weatherband]
-type = "sdr_weatherband"
+type = "sdr"
+modulation = "nbfm"
 frequency_mhz = 162.400
 device_index = 0
 gain = "auto"
+
+[sources.broadcast_fm]
+type = "sdr"
+modulation = "wbfm"
+frequency_mhz = 100.100
+
+[sources.broadcast_am]
+type = "sdr"
+modulation = "am"
+frequency_mhz = 1.053
+direct_sampling = true
 ```
 
-A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. Set `frequency_mhz` to the NOAA channel covering your area; the seven US channels run 162.400 to 162.550 MHz in 25 kHz steps.
+A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. The frequencies above are arbitrary placeholders rather than recommendations.
+
+`modulation` selects how `rtl_fm` demodulates:
+
+| value | for | notes |
+| --- | --- | --- |
+| `nbfm` | narrowband FM: the weather band and other public-service channels | the default |
+| `wbfm` | wideband FM: ordinary broadcast radio | |
+| `am` | AM: the broadcast and shortwave bands | see `direct_sampling` |
+
+Broadcast FM is wideband, so a broadcast station tuned as `nbfm` comes through as noise or near-silence; that is what `wbfm` is for. AM broadcast sits below the roughly 24 MHz floor of a bare RTL-SDR tuner, which reaches it only through its direct-sampling branch — set `direct_sampling = true`, or put an upconverter in front. `type = "sdr_weatherband"` still parses as `type = "sdr"` with `nbfm`.
 
 ## Built-in sources
 
 - `generated`: procedural alarm tone. The default; needs no files, network, or hardware.
 - `weatherband_162_400`, `weatherband_162_425`, `weatherband_162_450`, `weatherband_162_475`, `weatherband_162_500`, `weatherband_162_525`, `weatherband_162_550`: RTL-SDR presets, one per US NOAA weather-band channel.
 
-There are no presets for particular transmitters or regions: which weather-band channel reaches you depends on where you are, so pick the channel for your own area. `--list-sources` prints everything available.
+There are no presets for particular transmitters, stations, or regions: what reaches you depends on where you are, so a broadcast station goes in your own config as an `sdr` source. `--list-sources` prints everything available.
+
+NOAA Weather Radio is a North American service. Elsewhere the 162 MHz band carries nothing, and the built-in presets will sit silent however good the hardware is; broadcast FM or AM is the SDR option that travels.
 
 With RTL-SDR hardware, pick your channel:
 

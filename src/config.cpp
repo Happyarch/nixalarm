@@ -113,7 +113,7 @@ constexpr int kWeatherBandChannels = 7;
 
 static Source make_sdr(double mhz) {
   Source s;
-  s.type = SourceType::SdrWeatherband;
+  s.type = SourceType::Sdr;
   s.frequency_mhz = mhz;
   return s;
 }
@@ -206,14 +206,33 @@ static std::string default_config_text() {
       "# path = \"/home/user/Music/alarm.mid\"\n"
       "# soundfont = \"/usr/share/soundfonts/default.sf2\"\n"
       "\n"
-      "# NOAA weather band off RTL-SDR hardware. Set frequency_mhz to the channel\n"
-      "# covering your area; the seven US channels run 162.400 to 162.550 MHz in\n"
-      "# 25 kHz steps, and --list-sources has a preset for each.\n"
+      "# RTL-SDR radio. modulation picks how rtl_fm demodulates:\n"
+      "#   nbfm  narrowband FM -- the NOAA weather band and other public-service\n"
+      "#         channels. The seven US weather channels run 162.400 to 162.550\n"
+      "#         MHz in 25 kHz steps and --list-sources has a preset for each.\n"
+      "#         That service is North America only; elsewhere the band is quiet.\n"
+      "#   wbfm  wideband FM -- ordinary broadcast FM.\n"
+      "#   am    AM -- the broadcast and shortwave bands. Below about 24 MHz a\n"
+      "#         bare RTL-SDR needs direct_sampling = true, or an upconverter.\n"
+      "# The frequencies below are arbitrary placeholders, not recommendations;\n"
+      "# put in whatever your own receiver hears.\n"
       "# [sources.weatherband]\n"
-      "# type = \"sdr_weatherband\"\n"
+      "# type = \"sdr\"\n"
+      "# modulation = \"nbfm\"\n"
       "# frequency_mhz = 162.400\n"
       "# device_index = 0\n"
-      "# gain = \"auto\"\n";
+      "# gain = \"auto\"\n"
+      "\n"
+      "# [sources.broadcast_fm]\n"
+      "# type = \"sdr\"\n"
+      "# modulation = \"wbfm\"\n"
+      "# frequency_mhz = 100.100\n"
+      "\n"
+      "# [sources.broadcast_am]\n"
+      "# type = \"sdr\"\n"
+      "# modulation = \"am\"\n"
+      "# frequency_mhz = 1.053\n"
+      "# direct_sampling = true\n";
 }
 
 static void seed_default_config_if_missing(const fs::path& path) {
@@ -362,7 +381,8 @@ Config load_config(const fs::path& path) {
           if (type == "file") s.type = SourceType::File;
           else if (type == "internet") s.type = SourceType::Internet;
           else if (type == "midi") s.type = SourceType::Midi;
-          else if (type == "sdr_weatherband") s.type = SourceType::SdrWeatherband;
+          // sdr_weatherband predates the other modulations; it still parses.
+          else if (type == "sdr" || type == "sdr_weatherband") s.type = SourceType::Sdr;
           else s.type = SourceType::Generated;
         } else if (key == "path") s.path = unquote(val);
         else if (key == "url") s.url = unquote(val);
@@ -370,6 +390,16 @@ Config load_config(const fs::path& path) {
         else if (key == "frequency_mhz") s.frequency_mhz = std::stod(val);
         else if (key == "device_index") s.device_index = std::stoi(val);
         else if (key == "gain") s.gain = unquote(val);
+        else if (key == "direct_sampling") s.direct_sampling = (unquote(val) == "true");
+        else if (key == "modulation") {
+          std::string mode = unquote(val);
+          if (mode == "nbfm") s.modulation = Modulation::Nbfm;
+          else if (mode == "wbfm") s.modulation = Modulation::Wbfm;
+          else if (mode == "am") s.modulation = Modulation::Am;
+          else {
+            std::cerr << "nixalarm: modulation must be \"nbfm\", \"wbfm\" or \"am\"; using nbfm\n";
+          }
+        }
       }
     } catch (const std::exception& e) {
       std::cerr << "nixalarm: ignoring invalid config value " << key << "=" << val << ": " << e.what() << "\n";
@@ -385,7 +415,12 @@ void list_sources(const Config& cfg) {
     else if (source.type == SourceType::File) std::cout << "file\t" << source.path;
     else if (source.type == SourceType::Internet) std::cout << "internet\t" << source.url;
     else if (source.type == SourceType::Midi) std::cout << "midi\t" << source.path;
-    else if (source.type == SourceType::SdrWeatherband) std::cout << "sdr_weatherband\t" << source.frequency_mhz << " MHz";
+    else if (source.type == SourceType::Sdr) {
+      std::cout << "sdr\t" << source.frequency_mhz << " MHz ";
+      if (source.modulation == Modulation::Wbfm) std::cout << "wbfm";
+      else if (source.modulation == Modulation::Am) std::cout << "am";
+      else std::cout << "nbfm";
+    }
     std::cout << "\n";
   }
 }

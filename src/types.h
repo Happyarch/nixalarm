@@ -20,7 +20,12 @@ struct Color {
   Uint8 a = 255;
 };
 
-enum class SourceType { Generated, File, Internet, Midi, SdrWeatherband };
+enum class SourceType { Generated, File, Internet, Midi, Sdr };
+
+// How rtl_fm demodulates an SDR source: narrowband FM for the weather band and
+// other public-service channels, wideband FM for broadcast FM, AM for the
+// broadcast and shortwave bands.
+enum class Modulation { Nbfm, Wbfm, Am };
 
 struct Source {
   SourceType type = SourceType::Generated;
@@ -30,6 +35,9 @@ struct Source {
   double frequency_mhz = 162.45;
   int device_index = 0;
   std::string gain = "auto";
+  Modulation modulation = Modulation::Nbfm;
+  // Below roughly 24 MHz a bare RTL-SDR tuner needs its direct-sampling branch.
+  bool direct_sampling = false;
 };
 
 struct Config {
