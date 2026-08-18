@@ -15,7 +15,7 @@
       packages = forAllSystems ({ pkgs }: {
         default = pkgs.stdenv.mkDerivation {
           pname = "nixalarm";
-          version = "0.2.0";
+          version = "0.2.1";
           src = ../..;
 
           nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config ];

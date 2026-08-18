@@ -1,6 +1,6 @@
 # Maintainer: happyarch
 pkgname=nixalarm
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc='Small Linux alarm clock with seven-segment, nixie, analog, and sundial displays and file, stream, and optional SDR audio sources'
 arch=('x86_64' 'aarch64' 'armv7h' 'riscv64' 'loong64')
@@ -10,7 +10,7 @@ license=('GPL-3.0-or-later')
 # points for the raytraced sundial/moondial faces.
 depends=('sdl2' 'ffmpeg' 'fluidsynth' 'librsvg' 'libepoxy' 'gcc-libs' 'glibc')
 makedepends=('cmake' 'gcc' 'pkgconf')
-optdepends=('rtl-sdr: RTL-SDR NOAA weather-band alarm sources via rtl_fm')
+optdepends=('rtl-sdr: RTL-SDR alarm sources -- weather band, broadcast FM, AM -- via rtl_fm')
 source=()
 sha256sums=()
 
