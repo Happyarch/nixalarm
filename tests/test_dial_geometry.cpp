@@ -187,14 +187,13 @@ void test_plate_frame_degenerate_at_slant_zero() {
 // usable. With THIS model's fixed style LENGTH, the style just lies flatter
 // near the equator without shrinking -- its tip settles near a fixed offset
 // (~gnomon_length) from the dial center rather than collapsing to nothing.
-// Combined with the equinox-only (delta=0) construction sun capping daylight
-// at ~12h at every latitude by definition, the optimizer finds a horizontal
-// (or near-horizontal) plate already achieves the full achievable window at
-// most latitudes for this gnomon_length/plate_radius ratio -- i.e. switching
-// to a fixed-length style already resolved the original equatorial
-// degeneracy on its own, and the tilt optimizer's remaining job is mostly to
-// handle the cases where it still matters (e.g. very close to the poles).
-// So this test checks output validity/sanity, not a specific tilt magnitude.
+// That is why the optimizer's remaining job is not "rescue the equator" but
+// "choose among a wide plateau": lots of (slant, declination) pairs reach the
+// same contiguous-hour count, so what actually fixes the tilt is
+// kMinStyleElevationDeg plus score_of's preference for the least crowded hour
+// lines among equals. Do not read a specific tilt magnitude out of this test --
+// it checks output validity and sanity only. The floor itself is pinned by
+// test_optimizer_rejects_in_plane_style.
 void test_optimizer_sanity_across_latitudes() {
   for (double lat : {2.0, 35.0, 85.0}) {
     DialOrientation result = optimize_dial_orientation(lat, kDefaultGnomonLength, kDefaultPlateRadius,
@@ -219,7 +218,7 @@ void test_optimizer_sanity_across_latitudes() {
 // moves. The style must rise a real minimum angle off the plate for both
 // sundial and moondial, at every latitude.
 void test_optimizer_rejects_in_plane_style() {
-  constexpr double kMinSin = 0.3420;  // sin(20deg), matching the optimizer's floor
+  constexpr double kMinSin = 0.5;  // sin(30deg), matching the optimizer's floor
   for (bool moondial : {false, true}) {
     for (double lat : {2.0, 20.0, 35.0, 55.0, 85.0}) {
       DialOrientation result = optimize_dial_orientation(lat, kDefaultGnomonLength, kDefaultPlateRadius,
@@ -227,9 +226,16 @@ void test_optimizer_rejects_in_plane_style() {
       PlateFrame frame = compute_plate_frame(result.slant_deg, result.declination_deg);
       Vec3 style_local = project_to_local(style_vector_world(lat), frame);
       char label[128];
-      std::snprintf(label, sizeof(label), "%s lat=%.0f style rises >= 20deg off the plate (sin=%.4f)",
+      std::snprintf(label, sizeof(label), "%s lat=%.0f style rises >= 30deg off the plate (sin=%.4f)",
                     moondial ? "moondial" : "sundial", lat, style_local.z);
       expect_true(style_local.z >= kMinSin - 1e-6, label);
+      // The floor is what keeps the hour lines apart, so hold the gap it buys:
+      // the tightest pair straddles the substyle at atan(sin(elev) * tan 15deg),
+      // and half the 15 degrees an equatorial dial gets is the point of 30.
+      double tightest_gap_deg = rad2deg(std::atan(style_local.z * std::tan(deg2rad(15.0))));
+      std::snprintf(label, sizeof(label), "%s lat=%.0f tightest hour gap >= 7.5deg (%.2f)",
+                    moondial ? "moondial" : "sundial", lat, tightest_gap_deg);
+      expect_true(tightest_gap_deg >= 7.5, label);
     }
   }
 }

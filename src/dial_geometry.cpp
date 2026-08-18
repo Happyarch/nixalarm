@@ -69,6 +69,10 @@ ShadowSample shadow_point_impl(double /*latitude_deg*/, Vec3 style_w, const Plat
 struct ObjectiveResult {
   double contiguous_hours = 0.0;
   double avg_shadow_ratio = 1e9;  // lower is better; only meaningful when contiguous_hours > 0
+  // sin of the angle the style stands off the plate: the exact factor the plate
+  // compresses the hour lines by (see kMinStyleElevationDeg), so higher is a
+  // less crowded dial. Zero on a rejected orientation.
+  double style_sin_elevation = 0.0;
 };
 
 constexpr double kHourStepDeg = 1.25;  // 5-minute resolution (15 deg/hour / 12)
@@ -80,20 +84,36 @@ constexpr int kHourSamples = static_cast<int>(360.0 / kHourStepDeg);  // 288
 // triangle's vertical leg collapses to zero height, the rendered wedge
 // flattens into an invisible sliver, and -- because the tip sits on the plate
 // and its shadow barely moves -- every hour scores as "legible", so the
-// objective actively PREFERS a dial that cannot tell time. 20 degrees keeps
-// the gnomon a real, visible wedge at every latitude (a horizontal plate
-// already satisfies it for |lat| >= 20; nearer the equator the optimizer
-// finds a reclining/equatorial plate instead, which is also the classical
-// solution there).
-constexpr double kMinStyleElevationDeg = 20.0;
+// objective actively PREFERS a dial that cannot tell time.
+//
+// The floor also sets how CROWDED the hour lines are, which is why it is 30
+// and not the 20 it started at. Measured from the substyle, a dial's hour lines
+// obey tan(theta) = sin(elevation) * tan(H) whatever its tilt, so
+// sin(elevation) is exactly the factor by which the plate compresses the 15
+// degrees per hour an equatorial dial spaces its lines by. The tightest gap,
+// the one straddling the substyle, is atan(sin(elevation) * tan 15deg): at 20
+// degrees that is 5.2 and the midday hours pile into an unreadable fan, while
+// sin(30deg) = 1/2 puts it at 7.6, half the equatorial ideal.
+//
+// It costs legible hours -- a style standing further off the plate throws a
+// longer shadow, so the ends of the day run off the rim sooner -- and that is
+// the trade being made deliberately: hours you cannot tell apart are not worth
+// keeping. Accuracy is untouched either way, since the hour lines are always
+// derived from the true geometry of whichever plate the optimizer settles on.
+//
+// A horizontal plate satisfies the floor for |lat| >= 30; nearer the equator
+// the optimizer finds a reclining plate instead, which is also the classical
+// solution there.
+constexpr double kMinStyleElevationDeg = 30.0;
 
 ObjectiveResult evaluate_objective(double latitude_deg, double slant_deg, double declination_deg,
                                     double gnomon_length, double plate_radius, double k_legible,
                                     bool moondial) {
   PlateFrame frame = compute_plate_frame(slant_deg, declination_deg);
   Vec3 style_w = style_vector_world(latitude_deg);
-  if (project_to_local(style_w, frame).z < std::sin(deg2rad(kMinStyleElevationDeg))) {
-    return ObjectiveResult{0.0, 1e9};  // degenerate/near-flat gnomon: reject outright
+  double style_sin_elevation = project_to_local(style_w, frame).z;
+  if (style_sin_elevation < std::sin(deg2rad(kMinStyleElevationDeg))) {
+    return ObjectiveResult{0.0, 1e9, 0.0};  // degenerate/near-flat gnomon: reject outright
   }
   double legible_radius = k_legible * plate_radius;
 
@@ -123,7 +143,7 @@ ObjectiveResult evaluate_objective(double latitude_deg, double slant_deg, double
   if (all_valid) {
     double avg = 0.0;
     for (double r : shadow_ratio) avg += r;
-    return ObjectiveResult{24.0, avg / kHourSamples};
+    return ObjectiveResult{24.0, avg / kHourSamples, style_sin_elevation};
   }
 
   // Find an index where valid is false, to avoid needing wraparound logic --
@@ -160,13 +180,25 @@ ObjectiveResult evaluate_objective(double latitude_deg, double slant_deg, double
 
   double contiguous_hours = (best_run * kHourStepDeg) / 15.0;
   double avg_ratio = best_run > 0 ? (best_run_sum / best_run) : 1e9;
-  return ObjectiveResult{contiguous_hours, avg_ratio};
+  return ObjectiveResult{contiguous_hours, avg_ratio, style_sin_elevation};
 }
 
-// Deterministic scalar score for Nelder-Mead: contiguous hours dominate;
-// among near-ties, prefer a lower average shadow-length ratio (shadow well
-// within the legible zone, not just barely inside it).
-double score_of(const ObjectiveResult& r) { return r.contiguous_hours - 1e-6 * r.avg_shadow_ratio; }
+// Deterministic scalar score for Nelder-Mead: contiguous hours dominate, then
+// the LEAST crowded hour lines win, and a shorter average shadow breaks what is
+// left. Hours are quantized to kHourStepDeg (1/12 h), so both tie-breaks are
+// weighted far below one quantum and can never buy readability with an hour.
+//
+// The spread term matters because the objective is a step function with wide
+// plateaus: many (slant, declination) pairs reach the same hour count, and the
+// old shadow-ratio-only tie-break spent every one of those free parameters on
+// keeping the shadow short -- which means a style lying as flat against the
+// plate as the floor allows, i.e. the most crowded dial available. It settled
+// on the floor at every latitude. Preferring spread walks the same plateau in
+// the opposite direction, so the dial now spends its slack on legibility and
+// only falls back to the floor when nothing better keeps the hours.
+double score_of(const ObjectiveResult& r) {
+  return r.contiguous_hours - 1e-3 * (1.0 - r.style_sin_elevation) - 1e-6 * r.avg_shadow_ratio;
+}
 
 struct Point {
   double slant, declination;
