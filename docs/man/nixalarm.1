@@ -1,4 +1,4 @@
-.TH NIXALARM 1 "2026-08-18" "nixalarm 0.2.1" "User Commands"
+.TH NIXALARM 1 "2026-11-20" "nixalarm 0.2.1" "User Commands"
 .SH NAME
 nixalarm \- graphical Linux alarm clock with configurable audio sources
 .SH SYNOPSIS
@@ -21,31 +21,41 @@ nixalarm \- graphical Linux alarm clock with configurable audio sources
 .I NAME
 .SH DESCRIPTION
 .B nixalarm
-is a small Linux alarm utility. It displays the current local time in a large
-centered seven-segment clock window and rings at the next occurrence of the
-requested local
-.I HH:MM
-time.
+displays the current local time in a configurable clock window and rings at
+the next occurrence of the requested local time.
 .PP
-The alarm can play a generated tone, local audio files, internet radio streams,
-MIDI files through FluidSynth, or optional RTL-SDR weather-band audio through
+The alarm plays a generated tone, local audio files, internet streams, MIDI
+files rendered through FluidSynth, or RTL-SDR radio (narrowband FM, broadcast
+FM, AM) received through
 .BR rtl_fm (1).
 Local files and network streams are decoded through FFmpeg.
 .PP
-Configuration is read from
+Configuration comes from
 .BR nixalarm (5).
-Command line options override matching configuration values for the current run.
+Command line options override the matching values for the current run.
+Task-oriented guides ship in the repository under
+.I docs/users/alarms.md
+and
+.IR docs/users/sources.md ;
+they are not installed.
 .SH OPTIONS
+.SS Configuration
 .TP
 .BI --config " PATH"
 Read configuration from
 .I PATH
-instead of the XDG default.
+instead of the default location.
+A missing file is normal; see
+.BR nixalarm (5)
+for the default paths and the seeded defaults.
 .TP
 .BI --source " NAME"
 Use the configured or built-in source named
 .I NAME
-as the alarm source.
+for this run, overriding
+.B alarm_source
+from the configuration file.
+An unknown name fails with exit status 2.
 .TP
 .B --fullscreen
 Start in fullscreen desktop mode.
@@ -54,44 +64,67 @@ Start in fullscreen desktop mode.
 Start windowed, overriding
 .B fullscreen = true
 from the configuration file.
+.SS Standalone actions
 .TP
 .B --list-sources
-Print built-in and configured source names, then exit.
+Print the names and types of the built-in and configured sources, then exit.
+It accepts
+.B --config
+to read a different file.
+It arms no alarm, plays nothing, and checks no SDR gain.
 .TP
 .BI --test-source " NAME"
 Play source
 .I NAME
 immediately instead of scheduling an alarm.
+A command line time and the configured alarms are ignored.
+Gain validation and fallback behave as for a scheduled alarm.
+Playback ends when the alarm is snoozed or dismissed, or when
+.B nixalarm
+quits.
 .TP
 .BI --configure-source " NAME"
-Run the read-only gain setup wizard for an existing SDR source or built-in
-preset. Requires interactive standard input and standard error; standard output
-may be redirected. Prompts and editing instructions go to standard error.
-After confirmation, only the suggested TOML goes to standard output.
-The wizard does not create or edit files, initialize audio, access hardware,
-or arm an alarm. Only
+Run the read-only gain setup wizard for an existing SDR source or a built-in
+preset.
+Only
 .B --config
-may accompany this action. For the wizard, the config path must name a readable
-regular file or a file that does not yet exist; stream inputs are not editable
-configuration targets.
+may accompany this action, in any order; any other option or alarm argument is
+rejected with exit status 2.
+Standard input and standard error must be interactive terminals, while standard
+output may be redirected.
+Prompts and instructions go to standard error; only the suggested TOML goes to
+standard output, and only after confirmation.
+The wizard creates no files, edits no files, initializes no audio, accesses no
+hardware, arms no alarm, and selects no alarm source.
+For the wizard, the config path must name a readable regular file or a file
+that does not yet exist.
+.SS Informational
 .TP
 .B --help
 Print command usage, then exit.
 .TP
 .B --version
-Print version, then exit.
+Print the version, then exit.
 .SH TIME FORMAT
 Times without
 .B AM
 or
 .B PM
-use 24-hour local time. Times with
+use 24-hour local time with hours 0 through 23.
+Times with
 .B AM
 or
 .B PM
-use 12-hour local time. If the requested time has already passed today,
+in any letter case, with or without periods, use 12-hour local time with hours
+1 through 12.
+Minutes are 00 through 59.
+If the requested time has already passed today,
 .B nixalarm
 schedules the alarm for tomorrow.
+Each alarm fires once and does not recur.
+.B nixalarm
+must still be running when the time arrives; it does not wake a suspended
+machine.
 .PP
 Examples:
 .EX
@@ -99,29 +132,33 @@ nixalarm 19:30
 nixalarm "7:30 PM"
 .EE
 .PP
-If no time is provided,
+If no time is given,
 .B nixalarm
-uses the configured
+uses the
 .B alarms
-from
-.BR nixalarm (5).
+list from
+.BR nixalarm (5),
+for example for desktop menu launches.
 Set
 .B alarms = []
-for clock-only desktop launches.
+for clock-only launches with no alarm.
+An invalid entry in the configured list fails with exit status 2.
 .PP
-The clock display uses 12-hour time by default. Set
-.B use_24_hour = true
-in
+The
+.B use_24_hour
+key in
 .BR nixalarm (5)
-to display 24-hour time.
+changes only the clock display.
+It does not change how alarm times are parsed.
 .SH CONTROLS
 .TP
 .B Space
 While ringing, tap to snooze for the configured snooze period.
+In source test mode, tapping ends playback.
 .TP
 .B Space hold
-While ringing, hold continuously for the configured stop duration to dismiss the
-alarm.
+While ringing, hold continuously for the configured stop duration to dismiss
+the alarm and end playback.
 .TP
 .B F11
 Toggle fullscreen.
@@ -137,8 +174,10 @@ Quit.
 .SH BUILT-IN SOURCES
 .TP
 .B generated
-Procedural PCM alarm tone. This is the default and does not require files,
-network, or SDR hardware.
+Procedural PCM alarm tone.
+This is the default source.
+It needs no files, network, or SDR hardware, and it never falls back to
+another source.
 .TP
 .B weatherband_162_400
 .TQ
@@ -153,61 +192,109 @@ network, or SDR hardware.
 .B weatherband_162_525
 .TQ
 .B weatherband_162_550
-RTL-SDR presets, one per US NOAA weather-band channel. Coverage is
-location-dependent, so there are no presets for particular transmitters;
-choose the channel for the local area. For a station without SDR hardware, add
-an internet mirror of it to the config as a
+RTL-SDR presets, one per weather-band channel from 162.400 to 162.550 MHz in
+25 kHz steps.
+Coverage is location-dependent, so the presets name channels, not
+transmitters; each names the channel that covers the receiver location.
+For reception without SDR hardware, add an internet mirror as a
 .B [sources.NAME]
-of type
-.BR internet .
+section of type
+.B internet
+in
+.BR nixalarm (5).
 .PP
-SDR presets require an explicit manual
+Each SDR preset needs an explicit manual
 .B gain
-in the configuration before use. Missing gain and the legacy
+in the configuration before an alarm is armed or a source test starts.
+Missing gain and the legacy
 .B gain = "auto"
-setting are rejected before an SDR alarm is armed. The optional
+setting are rejected with exit status 2.
+The
 .B --configure-source
 wizard prints instructions for adding or replacing the setting.
-Normal launches never prompt. See
+Normal launches never prompt.
+Clock-only runs and
+.B --list-sources
+never check gain.
+See
 .BR nixalarm (5)
 for source definitions and gain validation.
 .SH EXAMPLES
 .TP
-Run a generated alarm at 7:30 AM:
+Ring with the default generated alarm at 07:30:
 .EX
-nixalarm 07:30
+$ nixalarm 07:30
 .EE
 .TP
-Generate setup instructions for an RTL-SDR weather-band channel:
+Ring at 7:30 in the evening:
 .EX
-nixalarm --configure-source weatherband_162_400
-.EE
-.TP
-Use the channel after applying the printed configuration and testing reception:
-.EX
-nixalarm --source weatherband_162_400 07:30
+$ nixalarm "7:30 PM"
 .EE
 .TP
 Start fullscreen with the configured default source:
 .EX
-nixalarm --fullscreen 07:30
+$ nixalarm --fullscreen 07:30
 .EE
 .TP
 Test the generated alarm source immediately:
 .EX
-nixalarm --test-source generated
+$ nixalarm --test-source generated
+.EE
+.TP
+Generate setup instructions for an RTL-SDR weather-band channel:
+.EX
+$ nixalarm --configure-source weatherband_162_400
+.EE
+.TP
+Use the channel after applying the printed configuration:
+.EX
+$ nixalarm --source weatherband_162_400 07:30
 .EE
 .SH EXIT STATUS
 .TP
 .B 0
-Successful completion, including generation of wizard instructions.
+Successful completion, including listing sources, printing help or version,
+and generating wizard instructions.
 .TP
 .B 1
-Runtime or I/O failure, or wizard cancellation or end of input.
+Runtime or input/output failure, or wizard cancellation, end of input, or
+output error.
 .TP
 .B 2
-Invalid invocation, source, or required SDR gain configuration.
-The wizard also returns this status when no interactive terminal is available.
+Invalid invocation, unknown source, or invalid or missing SDR gain.
+The wizard also returns this status when standard input or standard error has
+no interactive terminal, when the source is unknown or is not an SDR source,
+or when the source name uses characters outside the wizard's supported set
+(ASCII letters, digits, '_' and '-').
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME
+Base directory of the default configuration file.
+When unset or empty, the
+.B HOME
+fallback below is used.
+.TP
+.B HOME
+Base directory of the fallback configuration path
+.I $HOME/.config/nixalarm/config.toml
+when
+.B XDG_CONFIG_HOME
+is unset or empty.
+.TP
+.B NIXALARM_ASSET_DIR
+Optional directory of staged face artwork, checked before the installed and
+development locations.
+The nixie face treats it as the tube-art layout directory, while the dial
+faces treat it as the surface-map directory.
+When unset or empty, only the standard locations are searched.
+Missing nixie artwork leaves a vignette-only frame; missing dial maps fall
+back to procedural surfaces.
+.TP
+.B PATH
+Used to locate the
+.B rtl_fm
+program for SDR sources.
+A graphical launch may not inherit a shell search path.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/nixalarm/config.toml
@@ -216,7 +303,11 @@ Primary configuration file.
 .I $HOME/.config/nixalarm/config.toml
 Fallback configuration file when
 .B XDG_CONFIG_HOME
-is unset.
+is unset or empty.
+.PP
+See
+.BR nixalarm (5)
+for the file format, the seeded defaults, and the remaining lookup rules.
 .SH SEE ALSO
 .BR nixalarm (5),
 .BR rtl_fm (1),

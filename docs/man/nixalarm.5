@@ -1,11 +1,32 @@
-.TH NIXALARM 5 "2026-08-18" "nixalarm 0.2.1" "File Formats"
+.TH NIXALARM 5 "2026-11-20" "nixalarm 0.2.1" "File Formats"
 .SH NAME
 nixalarm \- configuration file for nixalarm
 .SH DESCRIPTION
 .B nixalarm
-reads a small TOML-like configuration file. If no file exists, built-in defaults
-are written to disk and then loaded.
-.PP
+reads a small TOML-like configuration file.
+Command line options in
+.BR nixalarm (1)
+override the matching values for the current run.
+A later assignment in the file overrides an earlier one.
+Unknown keys are ignored.
+Numeric conversions that fail keep the previous value and produce a warning on
+standard error, as do the explicitly validated
+.BR theme ,
+.BR dial_time ,
+.B analog_midnight_label
+and
+.B modulation
+values described below.
+Other invalid values are silent: anything but
+.BR true ,
+.BR 1 ,
+.B yes
+and
+.B on
+disables a boolean, an invalid color keeps the previous color, a list value
+without brackets parses as empty, and an unknown source type parses as
+.BR generated .
+.SH CONFIGURATION FILE
 The default path is:
 .PP
 .RS
@@ -14,226 +35,389 @@ The default path is:
 .PP
 If
 .B XDG_CONFIG_HOME
-is unset, the fallback path is:
+is unset or empty, the fallback path is:
 .PP
 .RS
 .I $HOME/.config/nixalarm/config.toml
 .RE
 .PP
+If both variables are unset or empty, the relative path
+.I config.toml
+is used.
+A missing file is normal for a read-only probe.
+On a normal launch, a missing file is seeded with the defaults and then
+loaded.
+A directory in place of the file produces a warning and the built-in defaults
+are used.
+An existing file that cannot be read also produces a warning and the built-in
+defaults are used.
+.PP
+The
+.B --configure-source
+wizard in
+.BR nixalarm (1)
+never seeds or modifies the file.
+It only reads the named path, which must be a readable regular file or a file
+that does not yet exist.
+.SH VALUE SYNTAX
 The parser supports simple
 .I key = value
 assignments, quoted strings, integers, floating point numbers, booleans, and
-sections. It is intentionally small and does not implement the full TOML
-language.
+sections.
+It is intentionally small and does not implement the full TOML language.
+.PP
+A
+.B #
+character starts a comment outside a quoted value.
+Quoted values keep their own
+.B #
+characters.
+A quote opens string mode only where a value can start: after
+.BR = ,
+.BR [ ,
+or
+.BR , .
+An apostrophe elsewhere, as in an unquoted path, does not start a string.
+.PP
+Booleans accept
+.BR true ,
+.BR 1 ,
+.B yes
+and
+.B on
+to enable.
+Any other value disables, without warning.
+The
+.B direct_sampling
+source key is narrower: only the literal value
+.B true
+enables it.
+.PP
+Colors are
+.B #rrggbb
+hexadecimal strings.
+An invalid color keeps its previous value, without warning.
+.PP
+The
+.B alarms
+list is a bracketed, comma-separated list.
+Elements may be quoted individually.
+A value without surrounding brackets parses as an empty list.
+.PP
+Section headers are
+.BR [window] ,
+.BR [style] ,
+and
+.B [sources.NAME]
+where
+.I NAME
+is literal text: the reader does not unquote section headers, so names
+containing spaces or dots work in the file itself.
+The
+.B --configure-source
+wizard in
+.BR nixalarm (1)
+is stricter: it accepts only ASCII letters, digits,
+.B _
+and
+.B -
+and rejects anything else.
+A second
+.B [sources.NAME]
+header resets that source to its defaults; never append a duplicate header to
+override a built-in preset.
+Edit the existing section instead.
 .SH TOP-LEVEL KEYS
+.SS Alarm schedule
 .TP
 .B alarm_source = "generated"
-Default alarm source name.
+Name of the alarm source.
+Overridden by
+.B --source
+and
+.B --test-source
+in
+.BR nixalarm (1).
 .TP
 .B alarms = ["07:30"]
-List of default alarm times used when
+Default alarm times used when
 .BR nixalarm (1)
-is launched without a command line time, such as from a desktop application
-menu. Times without
-.B AM
-or
-.B PM
-are parsed as 24-hour time. Times with
-.B AM
-or
-.B PM
-are parsed as 12-hour time. Use an empty list for clock-only no-argument
-launches.
+is launched without a command line time.
+Entries use the time format in
+.BR nixalarm (1);
+empty strings are skipped.
+A single entry that does not parse discards the entire list, so any non-empty
+list containing an invalid entry fails startup, as does a non-empty list of
+only empty strings.
+Use an empty list for clock-only launches; each alarm fires once and does not
+recur.
+See also
+.I docs/users/alarms.md
+in the repository.
+.SS Playback
+.TP
+.B volume = 0.9
+Playback volume, clamped to the range 0.0 through 1.0.
+Applies to generated, decoded, MIDI, and SDR audio alike.
+.TP
+.B source_start_timeout_seconds = 8
+Timeout in seconds, with a minimum of 1.
+For file and network sources it sets the FFmpeg protocol input/output
+timeout.
+For RTL-SDR sources it bounds the wait for the first audio sample.
+When a source yields no audio within the applicable wait, playback falls back
+to
+.BR fallback_source .
+.TP
+.B fallback_source = "generated"
+Source tried once when the selected source yields no audio.
+A source that played audio and then stopped does not fall back.
+If the fallback also yields no audio, there is no further fallback.
+An unknown fallback name plays the generated tone instead.
+A generated primary source never fails, so it never falls back.
 .TP
 .B snooze_minutes = 10
 Minutes added when Space is tapped while the alarm is ringing.
+Values below 1 behave as 1.
 .TP
 .B hold_to_stop_seconds = 10
 Seconds Space must be held continuously while ringing to dismiss the alarm.
-.TP
-.B volume = 0.9
-Playback volume from
-.B 0.0
-to
-.BR 1.0 .
-.TP
-.B source_start_timeout_seconds = 8
-FFmpeg read timeout, in seconds, for file and network sources.
-.TP
-.B fallback_source = "generated"
-Source to try when the selected source fails.
+Values below 1 behave as 1.
+.SS Clock display
 .TP
 .B use_24_hour = false
-Use a 24-hour clock display. The default
+Use a 24-hour clock display.
+The default
 .B false
-uses 12-hour display. Alarm times on the command line still use 24-hour
-.IR HH:MM .
+uses a 12-hour display.
+This key changes the seven-segment digits and the nixie tubes only.
+The analog face keeps its 12-hour dial, and the dial themes follow
+.BR dial_time ;
+see
+.B STYLE SECTION
+below.
+.SS Observer location
 .TP
 .B latitude = 0.0
-Observer latitude in signed degrees, positive north, clamped to
-.RB [ -90 ,
-.BR 90 ].
-Used only by the
-.BR sundial ,
-.B moondial
-and
-.B auto_dial
-themes, whose accuracy depends on it; the default 0.0 is not a sentinel but a
-real place (off the west coast of Africa).
+Observer latitude in signed degrees, positive north, clamped to -90 through
+90.
 .TP
 .B longitude = 0.0
-Observer longitude in signed degrees, positive east, clamped to
-.RB [ -180 ,
-.BR 180 ].
-Used only by the
+Observer longitude in signed degrees, positive east, clamped to -180 through
+180.
+.PP
+Both keys are used only by the
 .BR sundial ,
 .B moondial
 and
 .B auto_dial
-themes.
+themes, whose accuracy depends on them.
+The default 0.0, 0.0 is a real location on the equator at the prime meridian,
+not a sentinel; dial accuracy requires the true observer coordinates.
 .SH WINDOW SECTION
 .SS [window]
 .TP
 .B width = 800
-Initial window width.
+Initial window width, with a minimum of 240.
 .TP
 .B height = 360
-Initial window height.
+Initial window height, with a minimum of 160.
 .TP
 .B fullscreen = false
 Start in fullscreen desktop mode.
+Overridden by
+.B --fullscreen
+and
+.B --windowed
+in
+.BR nixalarm (1).
 .TP
 .B always_on_top = false
 Request an always-on-top window.
 .TP
 .B flash_hz = 2.0
-Flash rate, in hertz, while the alarm is ringing. Set to
+Flash rate in hertz while the alarm is ringing.
+The seven-segment face blanks on the off phase and the nixie face darkens its
+glow.
+Set to
 .B 0
 to disable flashing.
+The analog and dial faces do not flash; a ringing dial is signaled by sound.
 .SH STYLE SECTION
 .SS [style]
 .TP
 .B theme = "terminal_glow"
-Select the built-in visual theme. A theme sets both the clock rendering style
-and its colors. Set this before any color overrides.
+Select the built-in visual theme.
+A theme sets both the clock rendering style and its colors.
+Set this before any color overrides, since selecting a theme resets the
+palette and a later assignment in the file wins.
+An unknown theme name produces a warning and keeps the previous theme.
+See also
+.I docs/users/appearance.md
+in the repository.
 .PP
 Supported themes:
 .RS
 .TP
 .B terminal_glow
-Seven-segment digits. Dark green background, bright green digits, dim
-inactive segments, and glow.
+Seven-segment digits: dark green background, bright green digits, dim inactive
+segments, and glow.
 .TP
 .B sinnoh_green
-Seven-segment digits. Light green pixel-clock style with dark green block
-digits and no glow.
+Seven-segment digits in a light green pixel-clock style: light green
+background, dark green block digits, no glow.
 .TP
 .B nixie
-Photoreal nixie-tube digits. Does not use the color overrides below.
+Photoreal nixie-tube digits rendered from bundled artwork.
+Ignores the color keys below.
+The
+.B show_seconds
+key selects the 6-tube HH:MM:SS layout when true and the 4-tube HH:MM layout
+when false.
 .TP
 .B analog
-SVG-rendered analog dial based on the public-domain Wikimedia Commons animated
-analog clock, with the original script/branding removed and the hand motion
-driven by C++. A small alarm marker appears when an alarm or snooze is pending
-and pulses while ringing.
+Analog dial rendered from bundled SVG artwork with the hand motion driven in
+code.
+A small alarm marker appears when an alarm or snooze is pending and pulses
+while ringing.
+The face keeps its 12-hour dial regardless of
+.BR use_24_hour .
+The
+.B show_seconds
+key draws or hides only the seconds hand; the theme enables it by default.
+The
+.B roman_numerals
+key selects the Roman-numeral face variant.
 .TP
 .B sundial
-A horizontal sundial, ray-traced in OpenGL, telling the time by the shadow the
-sun actually casts at the configured
+A horizontal sundial, ray-traced in OpenGL, telling time by the shadow the sun
+casts at the configured
 .B latitude
 and
 .BR longitude .
-The plate tilt and hour spacing are optimized for that latitude at startup, and
-the dial is laid out for that latitude's summer solstice so it carries every
-hour its light can ever be up for. It is read as hour BANDS: the engraved lines
-are the boundaries between hours, drawn at the half hours, and each hour's
-Roman numeral sits in its own band, so the hour is named by which band the
-shadow lies in. Each boundary is a ray from the gnomon foot run out to the edge
-of the disc: every hour line lies in a plane containing the style, so all of
-them converge where the style meets the plate, and the shadow only ever falls
-on the side of the foot away from the light. The numerals are engraved into the
-plate as relief rather than painted on, so the lettering fills with shadow
-under a low sun, and each is scaled to the room its own band leaves it. A dial reads
-apparent solar time, which is not clock time: solar noon can be an hour or
-more from 12:00 on your watch depending on your position within the time
-zone, the equation of time, and daylight saving. Requires OpenGL 3.3. Does not use the color overrides below apart
-from
-.BR background ,
-which fills the area around the dial. Dark once the sun can no longer be read.
+The plate tilt and hour spacing are optimized for that latitude, and the dial
+is laid out for that latitude's summer solstice so it carries every hour its
+light can ever be up for.
+Hour bands are read by shadow position: the engraved lines are the boundaries
+between hours, drawn at the half hours, with each hour's Roman numeral in its
+own band.
+Each boundary is a ray from the gnomon foot run out to the edge of the disc;
+every hour line lies in a plane containing the style, so all of them converge
+where the style meets the plate.
+A dial reads apparent solar time, which is not clock time: solar noon can be
+an hour or more from 12:00 depending on position within the time zone, the
+equation of time, and daylight saving.
+Requires OpenGL 3.3.
+Uses only the
+.B background
+key below, which fills the area around the dial.
+Dark once the sun can no longer be read.
 .TP
 .B moondial
-The same instrument built for the Moon instead, and dark by day. Same
-requirements and color behavior as
+The same instrument built for the Moon instead.
+It is always rendered under the current Moon position, day or night.
+Same requirements and color behavior as
 .BR sundial .
 .TP
 .B auto_dial
-Both dials as one clock: whichever can currently be read, crossfading from one
-to the other at the changeover. The changeover follows readability rather than
-sunset -- a dial stops telling the time once the gnomon's shadow slides off the
-edge of the plate, some while before the body sets -- and the moon dial takes
-over only if the Moon is up and more than roughly a quarter lit. When neither
-dial can be read the face holds the one it was showing and goes dark. Same
-requirements and color behavior as
+Both dials as one clock.
+Each dial is always rendered under its own light; the visible dial is the one
+that can currently be read, crossfading from one to the other at the
+changeover.
+The changeover follows readability rather than sunset: a dial stops telling
+the time once the gnomon's shadow slides off the edge of the plate, some while
+before the body sets, and the moon dial takes over only if the Moon is up and
+more than roughly a quarter lit, since a thinner crescent casts no readable
+shadow.
+When neither dial can be read the face holds the showing dial, rendered under
+its current light.
+Same requirements and color behavior as
 .BR sundial .
 .RE
 .TP
 .B background = "#07180b"
-Window background color. Ignored by the
+Window background color.
+Honored by the seven-segment, analog, and dial themes.
+Ignored by the
 .B nixie
-theme.
+theme, which renders its own backdrop.
 .TP
 .B segment_on = "#6cff57"
-Active segment color. Ignored by the
+Active segment color for the seven-segment themes.
+The
+.B analog
+theme uses it only for the armed alarm marker.
+Ignored by the
 .B nixie
-theme.
+and dial themes.
 .TP
 .B segment_off = "#123319"
-Inactive segment color. Ignored by the
+Inactive segment color for the seven-segment themes.
+Ignored by the
 .B nixie
-theme.
+theme, the
+.B analog
+theme, and the dial themes.
 .TP
 .B glow = true
-Draw a soft glow behind active segments. Ignored by the
-.B nixie
-theme.
+Draw a soft glow behind active segments in the seven-segment themes.
+Ignored by every other theme.
 .TP
 .B show_seconds = false
-Show seconds in the clock display. For the
+Show seconds in the clock display.
+The seven-segment themes add seconds digits.
+For the
 .B analog
-theme, this draws or hides only the seconds hand; the
-.B analog
-theme enables it by default.
+theme, this draws or hides only the seconds hand.
+For the
+.B nixie
+theme, true selects the 6-tube HH:MM:SS layout and false selects the 4-tube
+HH:MM layout.
+The dial themes ignore this key.
 .TP
 .B roman_numerals = false
 For the
 .B analog
 theme, use the Roman-numeral SVG face instead of the default Arabic-numeral
 SVG face.
+Ignored by every other theme.
 .TP
 .B dial_time = "apparent"
 What the dial themes read.
 .B apparent
-is the sun's own time, uncorrected, as a real dial tells it.
+is each dial body's own uncorrected time, as the real instrument tells it:
+the sundial reads apparent solar time and the moondial reads apparent lunar
+time.
 .B mean
-applies the equation of time to give local mean solar time -- note this is
-still keyed to your longitude, not your zone's standard meridian, so it will
-not agree with your watch.
+applies the equation of time to give local mean solar time for both dials;
+it is derived from the sun even for the moon dial, so it also absorbs the
+moon's daily retardation.
+It is still keyed
+to the configured longitude, not to the time zone's standard meridian, so it
+does not agree with a watch.
 .B clock
 carries that the rest of the way to civil time, taking the zone offset and
 daylight saving from the system, and is the setting that matches a watch.
-.IP
 The correction is applied by rendering the light at the hour angle a sun
 keeping that time would have; declination is untouched, so shadows keep their
-real seasonal length. In a corrected mode the rendered light also rises and
-sets at corrected times.
+real seasonal length, and in a corrected mode the rendered light also rises
+and sets at corrected times.
+An invalid value produces a warning and keeps the previous mode.
+Ignored by every other theme.
 .TP
 .B analog_midnight_label = "24"
-Reserved for non-SVG 24-hour analog faces; ignored by the current
+Reserved for non-SVG 24-hour analog faces.
+Ignored by the current
 .B analog
-theme, which follows its source SVG's 12-hour Arabic dial.
+theme, which follows its bundled 12-hour Arabic dial.
+An invalid value produces a warning and keeps the previous label; only
+.B 24
+and
+.B 0
+are accepted.
 .SH SOURCE SECTIONS
 .SS [sources.NAME]
-Each source section adds or overrides an audio source named
+Each source section adds or overrides one audio source named
 .IR NAME .
 .PP
 Supported source types are
@@ -242,7 +426,92 @@ Supported source types are
 .BR internet ,
 .BR midi ,
 and
-.BR sdr_weatherband .
+.BR sdr .
+The legacy spelling
+.B sdr_weatherband
+is accepted as an alias for
+.BR sdr .
+An unknown type spelling parses as
+.B generated
+without warning.
+Source selection and setup are also covered in
+.I docs/users/sources.md
+in the repository.
+.SS File, stream, and MIDI keys
+.TP
+.B path = ""
+Audio file for
+.B file
+and
+.B midi
+sources.
+An empty path yields no audio, so playback falls back.
+.TP
+.B url = ""
+Stream address for
+.B internet
+sources.
+An empty address yields no audio, so playback falls back.
+.TP
+.B soundfont = ""
+SoundFont file for
+.B midi
+sources.
+If omitted or empty,
+.B nixalarm
+tries a short list of common system SoundFont paths.
+If no SoundFont can be found, the source yields no audio, so playback falls
+back.
+.SS RTL-SDR source keys
+.TP
+.B device_index = 0
+RTL-SDR dongle index.
+.TP
+.B frequency_mhz = 162.450
+Target frequency in megahertz.
+User sections without an explicit frequency keep this default.
+.TP
+.B modulation = "nbfm"
+Demodulator:
+.B nbfm
+for narrowband FM, which covers the weather band and other public-service
+channels and is the default;
+.B wbfm
+for wideband FM, meaning ordinary broadcast radio; and
+.B am
+for the broadcast and shortwave bands.
+An invalid value produces a warning and keeps the previous value.
+.TP
+.B direct_sampling = false
+Enable the tuner direct-sampling branch.
+A bare RTL-SDR needs this branch to reach anything below roughly 24 MHz, the
+AM broadcast band included.
+An upconverter does the same job in hardware.
+.TP
+.B gain
+Manual tuner gain in dB for
+.B sdr
+sources.
+It has no default; a section without it is rejected when that source is used.
+Quoted numeric values are accepted.
+The value must be finite: empty values, the word
+.B auto
+in any letter case, non-numeric text, trailing characters, and infinities are
+rejected.
+The value is scaled by ten and truncated toward zero to whole tenths, matching
+.BR rtl_fm ;
+fractional digits beyond the tenths place are discarded, so 20.05 becomes
+20.0.
+Any value that truncates onto -100 tenths, including -10.0 itself, is rejected
+because
+.B rtl_fm
+reserves that value for automatic gain.
+Explicit zero is valid.
+Validation rejects only values outside the signed integer tenths range the
+backend stores; it does not judge reception quality, and there is no universal
+recommended setting.
+Gain controls the receiver, independently of playback
+.BR volume .
 .SS Generated source
 .EX
 [sources.beep]
@@ -255,18 +524,19 @@ type = "file"
 path = "/home/user/Music/alarm.flac"
 .EE
 .PP
-Files are decoded through FFmpeg. Format support depends on the system FFmpeg
-build.
+Files are decoded through FFmpeg.
+Format support depends on the system FFmpeg build.
 .SS Internet source
 .EX
 [sources.weather_stream]
 type = "internet"
-url = "https://example.org/your-stream"
+# Set url to a personal stream address.
+url = ""
 .EE
 .PP
-Network streams are decoded through FFmpeg and fall back to
-.B fallback_source
-when startup or playback fails.
+Network streams are decoded through FFmpeg.
+A stream that yields no audio falls back to
+.BR fallback_source .
 .SS MIDI source
 .EX
 [sources.midi_alarm]
@@ -275,12 +545,14 @@ path = "/home/user/Music/alarm.mid"
 soundfont = "/usr/share/soundfonts/default.sf2"
 .EE
 .PP
-MIDI files are rendered through FluidSynth. If
+MIDI files are rendered through FluidSynth.
+If
 .B soundfont
 is omitted,
 .B nixalarm
-tries a few common system SoundFont paths. If no SoundFont can be found, the
-source fails and the configured fallback source is used.
+tries a short list of common system SoundFont paths.
+If no SoundFont can be found, the source yields no audio and the configured
+fallback source is used.
 .SS RTL-SDR source
 .EX
 [sources.weather_sdr]
@@ -289,123 +561,47 @@ modulation = "nbfm"
 frequency_mhz = 162.400
 device_index = 0
 gain = 20.0
-
-[sources.broadcast_fm]
-type = "sdr"
-modulation = "wbfm"
-frequency_mhz = 100.100
-gain = 20.0
-
-[sources.broadcast_am]
-type = "sdr"
-modulation = "am"
-frequency_mhz = 1.053
-direct_sampling = true
-gain = 20.0
 .EE
 .PP
-The frequencies and gains above are illustrative, not recommendations.
-.B gain
-sets the manual tuner gain in dB and has no default. A finite numeric value is
-required; quoted numeric values remain accepted. Missing gain,
-.B "auto"
-and malformed or out-of-representation values are rejected, as are values
-that select the backend's automatic-gain mode. Explicit zero is valid.
-Gain is passed in tenths of a dB; additional decimal places are truncated
-toward zero.
-Gain controls the receiver, independently of playback
-.BR volume .
-The appropriate value depends on the receiver and reception conditions;
-syntax validation does not establish hardware support or reception quality.
+The frequency and gain above are illustrative, not recommendations.
 .PP
 Required gain is checked for the selected SDR source and any reachable SDR
-fallback before an alarm is armed or a source test starts. Unused SDR sources,
-source listing, and clock-only operation do not require gain setup.
+fallback before an alarm is armed or a source test starts.
+Unused SDR sources, source listing, and clock-only operation require no gain
+setup.
 The offline default remains
 .BR generated .
 .PP
 Run
 .B nixalarm --configure-source NAME
-for optional read-only setup instructions. The wizard prints a gain assignment
-for an existing source section, or a complete definition for a built-in preset.
-Source sections replace built-in definitions, so a gain-only section is not a
-valid way to override a preset. Add or replace the assignment in an existing
-section without appending a duplicate section. See
+for read-only setup instructions; see
 .BR nixalarm (1)
-for wizard terminal requirements and exit status.
-.PP
-.B modulation
-selects the demodulator:
-.B nbfm
-for narrowband FM, which covers the weather band and other public-service
-channels and is the default;
-.B wbfm
-for wideband FM, meaning ordinary broadcast radio; and
-.B am
-for the broadcast and shortwave bands. Broadcast FM tuned as
-.B nbfm
-arrives as noise or near-silence, since it is a wideband signal.
-.PP
-.B direct_sampling
-enables the tuner's direct-sampling branch, which a bare RTL-SDR needs to reach
-anything below roughly 24 MHz, the AM broadcast band included. An upconverter
-does the same job in hardware.
-.PP
-.B type = "sdr_weatherband"
-is still accepted and means
-.B type = "sdr"
-with
-.BR nbfm .
+for the wizard terminal requirements and exit status.
+The wizard prints a gain assignment for an existing user section, or a
+complete section for a built-in preset.
+Source sections replace built-in definitions, so a gain-only section is not a
+valid way to override a preset: add or replace the assignment in the existing
+section without appending a duplicate section header.
 .PP
 SDR sources require RTL-SDR hardware and the
 .BR rtl_fm (1)
 program at runtime.
-.SH COMPLETE EXAMPLE
-.EX
-alarm_source = "generated"
-alarms = ["07:30", "5:30 PM"]
-snooze_minutes = 10
-hold_to_stop_seconds = 10
-volume = 0.9
-source_start_timeout_seconds = 8
-fallback_source = "generated"
-use_24_hour = false
-latitude = 0.0
-longitude = 0.0
-
-[window]
-width = 800
-height = 360
-fullscreen = false
-always_on_top = false
-flash_hz = 2.0
-
-[style]
-theme = "sinnoh_green"
-show_seconds = false
-roman_numerals = false
-analog_midnight_label = "24"
-dial_time = "apparent"
-
-[sources.local_song]
-type = "file"
-path = "/home/user/Music/alarm.flac"
-
-[sources.midi_alarm]
-type = "midi"
-path = "/home/user/Music/alarm.mid"
-soundfont = "/usr/share/soundfonts/default.sf2"
-
-[sources.weather_stream]
-type = "internet"
-url = "https://example.org/your-stream"
-
-[sources.weatherband]
-type = "sdr_weatherband"
-frequency_mhz = 162.400
-device_index = 0
-gain = 20.0 # Illustrative only; choose for the receiver.
-.EE
+Missing hardware, a missing
+.B rtl_fm
+binary, and a source that yields no audio are runtime events, not startup
+errors: the
+normal fallback path plays
+.B fallback_source
+instead.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/nixalarm/config.toml
+Primary configuration file.
+.TP
+.I $HOME/.config/nixalarm/config.toml
+Fallback configuration file when
+.B XDG_CONFIG_HOME
+is unset or empty.
 .SH SEE ALSO
 .BR nixalarm (1),
 .BR rtl_fm (1),

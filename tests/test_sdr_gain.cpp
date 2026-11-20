@@ -336,10 +336,20 @@ void test_defaults_and_read_only_load() {
   std::string seeded_text = read_text(seeded);
   expect_true(count_occurrences(seeded_text, "gain = 20.0") >= 3,
               "generated SDR examples all carry a manual gain");
-  expect_true(seeded_text.find("gain = \"auto\"") == std::string::npos,
+  expect_true(seeded_text.find("# gain = \"auto\"") == std::string::npos,
               "generated examples no longer use auto gain");
   expect_true(seeded_text.find("recommendations") != std::string::npos,
               "generated gains are labelled illustrative, not recommendations");
+  expect_true(seeded_text.find("nixalarm --configure-source NAME") != std::string::npos,
+              "generated config points to the gain setup wizard");
+  expect_true(seeded_text.find("it does not save changes") != std::string::npos,
+              "generated config explains read-only wizard behavior");
+  expect_true(seeded_text.find("--test-source NAME") != std::string::npos &&
+                  seeded_text.find("--source NAME") != std::string::npos,
+              "generated config explains source testing and selection");
+  expect_true(seeded_cfg.alarm_source == "generated" &&
+                  seeded_cfg.fallback_source == "generated",
+              "generated defaults retain offline alarm and fallback");
 
   fs::remove_all(dir);
 }
