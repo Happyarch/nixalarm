@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -34,7 +35,9 @@ struct Source {
   std::string soundfont;
   double frequency_mhz = 162.45;
   int device_index = 0;
-  std::string gain = "auto";
+  // Raw config text, deliberately never normalized here: playback validates it
+  // and rejects an unset or invalid value instead of silently substituting one.
+  std::string gain;
   Modulation modulation = Modulation::Nbfm;
   // Below roughly 24 MHz a bare RTL-SDR tuner needs its direct-sampling branch.
   bool direct_sampling = false;
@@ -69,4 +72,8 @@ struct Config {
   double latitude = 0.0;
   double longitude = 0.0;
   std::map<std::string, Source> sources;
+  // Names of [sources.NAME] sections written in the user's config file, as
+  // opposed to built-in presets. The wizard uses this to tell which built-ins
+  // the user has already claimed.
+  std::set<std::string> configured_sources;
 };

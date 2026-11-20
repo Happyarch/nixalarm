@@ -25,6 +25,42 @@ static std::string unquote(std::string s) {
   return s;
 }
 
+// A '#' starts a comment only outside a quoted value. A quote opens string
+// mode only where a value can start -- after '=', '[' or ',' -- so an
+// apostrophe inside an unquoted path such as /home/o'brien does not swallow
+// the rest of the line. Quoted URLs and colors keep their '#', and list
+// elements may be quoted individually.
+static bool quote_starts_value(const std::string& line, std::size_t pos) {
+  std::size_t i = pos;
+  while (i > 0 && std::isspace(static_cast<unsigned char>(line[i - 1]))) --i;
+  if (i == 0) return true;
+  char previous = line[i - 1];
+  return previous == '=' || previous == '[' || previous == ',';
+}
+
+static std::string strip_comment(const std::string& line) {
+  char quote = 0;
+  bool escaping = false;
+  for (std::size_t i = 0; i < line.size(); ++i) {
+    char c = line[i];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (quote) {
+      if (c == '\\') escaping = true;
+      else if (c == quote) quote = 0;
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      if (quote_starts_value(line, i)) quote = c;
+      continue;
+    }
+    if (c == '#') return line.substr(0, i);
+  }
+  return line;
+}
+
 static bool parse_bool(const std::string& s) {
   return s == "true" || s == "1" || s == "yes" || s == "on";
 }
@@ -206,7 +242,8 @@ static std::string default_config_text() {
       "# path = \"/home/user/Music/alarm.mid\"\n"
       "# soundfont = \"/usr/share/soundfonts/default.sf2\"\n"
       "\n"
-      "# RTL-SDR radio. modulation picks how rtl_fm demodulates:\n"
+      "# RTL-SDR radio. Every SDR source needs an explicit manual tuner gain in\n"
+      "# dB; automatic gain is not used. modulation picks how rtl_fm demodulates:\n"
       "#   nbfm  narrowband FM -- the NOAA weather band and other public-service\n"
       "#         channels. The seven US weather channels run 162.400 to 162.550\n"
       "#         MHz in 25 kHz steps and --list-sources has a preset for each.\n"
@@ -214,24 +251,26 @@ static std::string default_config_text() {
       "#   wbfm  wideband FM -- ordinary broadcast FM.\n"
       "#   am    AM -- the broadcast and shortwave bands. Below about 24 MHz a\n"
       "#         bare RTL-SDR needs direct_sampling = true, or an upconverter.\n"
-      "# The frequencies below are arbitrary placeholders, not recommendations;\n"
-      "# put in whatever your own receiver hears.\n"
+      "# The frequencies and gains below are arbitrary placeholders, not\n"
+      "# recommendations; put in whatever your own receiver hears.\n"
       "# [sources.weatherband]\n"
       "# type = \"sdr\"\n"
       "# modulation = \"nbfm\"\n"
       "# frequency_mhz = 162.400\n"
       "# device_index = 0\n"
-      "# gain = \"auto\"\n"
+      "# gain = 20.0\n"
       "\n"
       "# [sources.broadcast_fm]\n"
       "# type = \"sdr\"\n"
       "# modulation = \"wbfm\"\n"
       "# frequency_mhz = 100.100\n"
+      "# gain = 20.0\n"
       "\n"
       "# [sources.broadcast_am]\n"
       "# type = \"sdr\"\n"
       "# modulation = \"am\"\n"
       "# frequency_mhz = 1.053\n"
+      "# gain = 20.0\n"
       "# direct_sampling = true\n";
 }
 
@@ -292,22 +331,31 @@ static std::vector<std::string> parse_string_list(const std::string& raw) {
   return out;
 }
 
-Config load_config(const fs::path& path) {
+Config load_config(const fs::path& path, bool seed_if_missing) {
   Config cfg;
   cfg.sources = builtin_sources();
-  seed_default_config_if_missing(path);
+  if (seed_if_missing) seed_default_config_if_missing(path);
+  std::error_code read_ec;
+  const bool existed = !path.empty() && fs::exists(path, read_ec) && !read_ec;
+  // Refuse only directories. FIFOs and /proc/self/fd paths are legitimate
+  // read-only config streams (for example --config <(printf ...)).
+  if (existed && fs::is_directory(path, read_ec)) {
+    std::cerr << "nixalarm: config is a directory: " << path << "\n";
+    return cfg;
+  }
   std::ifstream in(path);
-  if (!in) return cfg;
+  if (!in) {
+    // A missing file is normal for a read-only probe. An existing file that
+    // cannot be opened is not: say so rather than silently returning defaults.
+    if (existed) std::cerr << "nixalarm: could not read config: " << path << "\n";
+    return cfg;
+  }
 
   std::string section;
   std::string source_name;
   std::string line;
   while (std::getline(in, line)) {
-    auto comment = line.find('#');
-    if (comment != std::string::npos && (line.find('"') == std::string::npos || comment < line.find('"'))) {
-      line = line.substr(0, comment);
-    }
-    line = trim(line);
+    line = trim(strip_comment(line));
     if (line.empty()) continue;
     if (line.front() == '[' && line.back() == ']') {
       section = line.substr(1, line.size() - 2);
@@ -315,6 +363,7 @@ Config load_config(const fs::path& path) {
       const std::string prefix = "sources.";
       if (section.rfind(prefix, 0) == 0) {
         source_name = section.substr(prefix.size());
+        if (!source_name.empty()) cfg.configured_sources.insert(source_name);
         cfg.sources[source_name] = Source{};
       }
       continue;

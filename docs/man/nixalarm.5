@@ -288,21 +288,52 @@ type = "sdr"
 modulation = "nbfm"
 frequency_mhz = 162.400
 device_index = 0
-gain = "auto"
+gain = 20.0
 
 [sources.broadcast_fm]
 type = "sdr"
 modulation = "wbfm"
 frequency_mhz = 100.100
+gain = 20.0
 
 [sources.broadcast_am]
 type = "sdr"
 modulation = "am"
 frequency_mhz = 1.053
 direct_sampling = true
+gain = 20.0
 .EE
 .PP
-The frequencies above are arbitrary placeholders, not recommendations.
+The frequencies and gains above are illustrative, not recommendations.
+.B gain
+sets the manual tuner gain in dB and has no default. A finite numeric value is
+required; quoted numeric values remain accepted. Missing gain,
+.B "auto"
+and malformed or out-of-representation values are rejected, as are values
+that select the backend's automatic-gain mode. Explicit zero is valid.
+Gain is passed in tenths of a dB; additional decimal places are truncated
+toward zero.
+Gain controls the receiver, independently of playback
+.BR volume .
+The appropriate value depends on the receiver and reception conditions;
+syntax validation does not establish hardware support or reception quality.
+.PP
+Required gain is checked for the selected SDR source and any reachable SDR
+fallback before an alarm is armed or a source test starts. Unused SDR sources,
+source listing, and clock-only operation do not require gain setup.
+The offline default remains
+.BR generated .
+.PP
+Run
+.B nixalarm --configure-source NAME
+for optional read-only setup instructions. The wizard prints a gain assignment
+for an existing source section, or a complete definition for a built-in preset.
+Source sections replace built-in definitions, so a gain-only section is not a
+valid way to override a preset. Add or replace the assignment in an existing
+section without appending a duplicate section. See
+.BR nixalarm (1)
+for wizard terminal requirements and exit status.
+.PP
 .B modulation
 selects the demodulator:
 .B nbfm
@@ -373,7 +404,7 @@ url = "https://example.org/your-stream"
 type = "sdr_weatherband"
 frequency_mhz = 162.400
 device_index = 0
-gain = "auto"
+gain = 20.0 # Illustrative only; choose for the receiver.
 .EE
 .SH SEE ALSO
 .BR nixalarm (1),

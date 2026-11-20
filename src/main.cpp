@@ -14,6 +14,7 @@
 #include "audio.h"
 #include "clock.h"
 #include "config.h"
+#include "source_setup.h"
 #include "stb_image.h"
 #include "types.h"
 
@@ -65,11 +66,96 @@ static void usage() {
       "  --windowed           Start windowed, overriding config fullscreen.\n"
       "  --list-sources       Print built-in and configured sources.\n"
       "  --test-source NAME   Play a source immediately.\n"
+      "  --configure-source NAME\n"
+      "                       Interactively choose an SDR gain and print TOML.\n"
       "  --help               Print help.\n"
       "  --version            Print version.\n";
 }
 
+static bool has_configure_source_flag(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    // Skip an option's operand so `--config --configure-source` (a legal path
+    // spelled with leading dashes) is not mistaken for the wizard action.
+    if (arg == "--config" || arg == "--source" || arg == "--test-source") {
+      if (i + 1 < argc) ++i;
+      continue;
+    }
+    if (arg == "--configure-source") return true;
+  }
+  return false;
+}
+
+static int configure_usage_error(const std::string& message) {
+  std::cerr << "nixalarm: " << message << "\n"
+            << "usage: nixalarm [--config PATH] --configure-source NAME\n";
+  return 2;
+}
+
+// --configure-source is a standalone action: only --config may accompany it,
+// in any order. Keeping this in its own parser means the normal CLI's flag
+// handling (and its defaults) stays exactly as it was.
+static int run_configure_source_mode(int argc, char** argv) {
+  fs::path config_path = default_config_path();
+  std::string source_name;
+  bool have_source = false;
+  bool have_config = false;
+
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--config") {
+      if (have_config) return configure_usage_error("--config specified more than once");
+      if (i + 1 >= argc) return configure_usage_error("--config requires a path");
+      std::string value = argv[++i];
+      if (value.empty()) return configure_usage_error("--config requires a path");
+      config_path = value;
+      have_config = true;
+    } else if (arg == "--configure-source") {
+      if (have_source) {
+        return configure_usage_error("--configure-source specified more than once");
+      }
+      if (i + 1 >= argc) return configure_usage_error("--configure-source requires a source name");
+      std::string value = argv[++i];
+      if (value.empty()) {
+        return configure_usage_error("--configure-source requires a source name");
+      }
+      source_name = value;
+      have_source = true;
+    } else {
+      return configure_usage_error("option or alarm not allowed with --configure-source: " + arg);
+    }
+  }
+  if (!have_source) return configure_usage_error("--configure-source requires a source name");
+
+  if (!wizard_stdin_stderr_interactive()) {
+    std::cerr << "nixalarm: --configure-source requires interactive stdin and stderr "
+                 "(stdout may be redirected)\n";
+    return 2;
+  }
+
+  // An existing but unreadable config must not look like an absent one: the
+  // wizard would otherwise describe built-in defaults and print a misleading
+  // snippet. A missing file is fine; load_config(..., false) will not seed it.
+  std::string read_error;
+  ConfigReadStatus read_status = check_config_readable(config_path, &read_error);
+  if (read_status == ConfigReadStatus::Error) {
+    std::cerr << "nixalarm: cannot read config " << shell_quote(config_path.string()) << ": "
+              << read_error << "\n";
+    return 1;
+  }
+
+  Config cfg = load_config(config_path, false);
+  WizardOptions options;
+  options.source_name = source_name;
+  options.program = (argv[0] && *argv[0]) ? argv[0] : "nixalarm";
+  options.config_path = config_path.string();
+  options.config_missing = (read_status == ConfigReadStatus::Missing);
+  return static_cast<int>(run_source_wizard(cfg, options, std::cin, std::cout, std::cerr));
+}
+
 int main(int argc, char** argv) {
+  if (has_configure_source_flag(argc, argv)) return run_configure_source_mode(argc, argv);
+
   fs::path config_path = default_config_path();
   std::string source_override;
   std::string test_source;
@@ -119,6 +205,24 @@ int main(int argc, char** argv) {
     cfg.alarm_source = test_source;
   }
 
+  auto source_it = cfg.sources.find(cfg.alarm_source);
+  if (source_it == cfg.sources.end()) {
+    std::cerr << "nixalarm: unknown source: " << shell_quote(cfg.alarm_source) << "\n";
+    return 2;
+  }
+
+  // Reject an unusable SDR setup before claiming the clock is armed, and before
+  // opening SDL or an audio device. A Generated alarm source never fails into
+  // its fallback, so that fallback stays unvalidated; clock-only runs validate
+  // nothing at all.
+  const bool audio_will_start = !test_source.empty() || !alarm_times.empty();
+  PreflightContext preflight;
+  preflight.program = (argv[0] && *argv[0]) ? argv[0] : "nixalarm";
+  preflight.config_path = config_path.string();
+  PreflightResult ready = preflight_audio_sources(
+      cfg, cfg.alarm_source, cfg.fallback_source, audio_will_start, std::cerr, preflight);
+  if (!ready.ok) return ready.exit_code;
+
   if (test_source.empty()) {
     if (alarm_times.empty()) {
       std::cerr << "nixalarm: no alarms configured; running as clock only\n";
@@ -127,12 +231,6 @@ int main(int argc, char** argv) {
         std::cerr << "nixalarm: armed for " << format_local_time(scheduled) << "\n";
       }
     }
-  }
-
-  auto source_it = cfg.sources.find(cfg.alarm_source);
-  if (source_it == cfg.sources.end()) {
-    std::cerr << "nixalarm: unknown source: " << cfg.alarm_source << "\n";
-    return 2;
   }
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {

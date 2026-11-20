@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "sdr_gain.h"
 
 #include <fluidsynth.h>
 
@@ -279,6 +280,18 @@ bool AudioPlayer::source_is_file(const std::string& uri) {
 }
 
 bool AudioPlayer::play_sdr(const Source& source) {
+  // Validate before creating a pipe or forking: an unusable gain must fail
+  // cleanly and let the normal fallback path take over.
+  std::string gain_error;
+  if (!validate_sdr_gain(source.gain, &gain_error)) {
+    std::cerr << "nixalarm: SDR source at " << std::fixed << std::setprecision(3)
+              << source.frequency_mhz << " MHz has unusable gain";
+    if (!source.gain.empty()) std::cerr << " \"" << source.gain << "\"";
+    std::cerr << ": " << gain_error << "; using the fallback source\n";
+    return false;
+  }
+  std::string gain = canonical_sdr_gain(source.gain);
+
   std::ostringstream freq;
   // Six places so an AM channel can be named to the hertz.
   freq << std::fixed << std::setprecision(6) << source.frequency_mhz << "M";
@@ -302,10 +315,9 @@ bool AudioPlayer::play_sdr(const Source& source) {
   }
   args.insert(args.end(), {"-r", rate, "-d", device});
   if (source.direct_sampling) args.insert(args.end(), {"-E", "direct"});
-  if (source.gain != "auto") {
-    args.push_back("-g");
-    args.push_back(source.gain);
-  }
+  // Always explicit: rtl_fm's built-in default is automatic gain, which this
+  // program deliberately does not use. `gain` is canonicalized and validated.
+  args.insert(args.end(), {"-g", gain});
 
   if (source.modulation == Modulation::Am && source.frequency_mhz < 24.0 && !source.direct_sampling) {
     std::cerr << "nixalarm: " << std::fixed << std::setprecision(3) << source.frequency_mhz

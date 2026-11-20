@@ -14,6 +14,11 @@ nixalarm \- graphical Linux alarm clock with configurable audio sources
 .B nixalarm
 .B --list-sources
 .RI [ OPTIONS ]
+.br
+.B nixalarm
+.RI [ --config " PATH" ]
+.B --configure-source
+.I NAME
 .SH DESCRIPTION
 .B nixalarm
 is a small Linux alarm utility. It displays the current local time in a large
@@ -57,6 +62,18 @@ Print built-in and configured source names, then exit.
 Play source
 .I NAME
 immediately instead of scheduling an alarm.
+.TP
+.BI --configure-source " NAME"
+Run the read-only gain setup wizard for an existing SDR source or built-in
+preset. Requires interactive standard input and standard error; standard output
+may be redirected. Prompts and editing instructions go to standard error.
+After confirmation, only the suggested TOML goes to standard output.
+The wizard does not create or edit files, initialize audio, access hardware,
+or arm an alarm. Only
+.B --config
+may accompany this action. For the wizard, the config path must name a readable
+regular file or a file that does not yet exist; stream inputs are not editable
+configuration targets.
 .TP
 .B --help
 Print command usage, then exit.
@@ -143,6 +160,17 @@ an internet mirror of it to the config as a
 .B [sources.NAME]
 of type
 .BR internet .
+.PP
+SDR presets require an explicit manual
+.B gain
+in the configuration before use. Missing gain and the legacy
+.B gain = "auto"
+setting are rejected before an SDR alarm is armed. The optional
+.B --configure-source
+wizard prints instructions for adding or replacing the setting.
+Normal launches never prompt. See
+.BR nixalarm (5)
+for source definitions and gain validation.
 .SH EXAMPLES
 .TP
 Run a generated alarm at 7:30 AM:
@@ -150,7 +178,12 @@ Run a generated alarm at 7:30 AM:
 nixalarm 07:30
 .EE
 .TP
-Use an RTL-SDR weather-band channel:
+Generate setup instructions for an RTL-SDR weather-band channel:
+.EX
+nixalarm --configure-source weatherband_162_400
+.EE
+.TP
+Use the channel after applying the printed configuration and testing reception:
 .EX
 nixalarm --source weatherband_162_400 07:30
 .EE
@@ -164,6 +197,17 @@ Test the generated alarm source immediately:
 .EX
 nixalarm --test-source generated
 .EE
+.SH EXIT STATUS
+.TP
+.B 0
+Successful completion, including generation of wizard instructions.
+.TP
+.B 1
+Runtime or I/O failure, or wizard cancellation or end of input.
+.TP
+.B 2
+Invalid invocation, source, or required SDR gain configuration.
+The wizard also returns this status when no interactive terminal is available.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/nixalarm/config.toml

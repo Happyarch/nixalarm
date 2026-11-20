@@ -56,9 +56,17 @@ target_compile_definitions(analog_clock PRIVATE
   NIXALARM_DATADIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/nixalarm")
 target_link_libraries(analog_clock PUBLIC PkgConfig::SDL2 PkgConfig::RSVG)
 
+add_library(source_setup STATIC
+  src/config.cpp
+  src/sdr_gain.cpp
+  src/source_setup.cpp
+)
+target_include_directories(source_setup PUBLIC src)
+target_compile_options(source_setup PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(source_setup PUBLIC PkgConfig::SDL2)
+
 add_executable(nixalarm
   src/main.cpp
-  src/config.cpp
   src/audio.cpp
   src/clock.cpp
   src/nixie.cpp
@@ -67,7 +75,7 @@ add_executable(nixalarm
 )
 target_include_directories(nixalarm PRIVATE src third_party)
 target_compile_options(nixalarm PRIVATE -Wall -Wextra -Wpedantic)
-target_link_libraries(nixalarm PRIVATE dial_math dial_render analog_clock)
+target_link_libraries(nixalarm PRIVATE dial_math dial_render analog_clock source_setup)
 # --version/--help print PROJECT_VERSION rather than their own copy of it, so
 # the one in project() above is the single place a release bump has to touch.
 target_compile_definitions(nixalarm PRIVATE
@@ -83,6 +91,20 @@ target_link_libraries(nixalarm PRIVATE
 )
 
 enable_testing()
+add_executable(nixalarm_sdr_gain_tests tests/test_sdr_gain.cpp)
+target_link_libraries(nixalarm_sdr_gain_tests PRIVATE source_setup)
+add_test(NAME sdr_gain_tests COMMAND nixalarm_sdr_gain_tests)
+
+add_executable(nixalarm_source_setup_tests tests/test_source_setup.cpp)
+target_link_libraries(nixalarm_source_setup_tests PRIVATE source_setup)
+add_test(NAME source_setup_tests COMMAND nixalarm_source_setup_tests)
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME sdr_cli_tests COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/tests/test_sdr_cli.py" "$<TARGET_FILE:nixalarm>")
+endif()
+
 add_executable(nixalarm_dial_tests tests/test_dial_geometry.cpp)
 target_link_libraries(nixalarm_dial_tests PRIVATE dial_math)
 add_test(NAME dial_geometry_tests COMMAND nixalarm_dial_tests)

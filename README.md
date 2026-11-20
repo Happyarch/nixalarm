@@ -117,6 +117,8 @@ Options:
   --windowed           Start windowed, overriding config fullscreen.
   --list-sources       Print built-in and configured sources.
   --test-source NAME   Play a source immediately.
+  --configure-source NAME
+                       Run the read-only SDR gain setup wizard.
   --help               Print help.
   --version            Print version.
 ```
@@ -151,7 +153,7 @@ $HOME/.config/nixalarm/config.toml
 ```
 
 If the selected config file does not exist, `nixalarm` creates it with default
-settings before loading it.
+settings before loading it, except during the read-only setup wizard.
 
 Example:
 
@@ -202,18 +204,20 @@ type = "sdr"
 modulation = "nbfm"
 frequency_mhz = 162.400
 device_index = 0
-gain = "auto"
+gain = 20.0 # Illustrative only; choose for your receiver.
 
 [sources.broadcast_fm]
 type = "sdr"
 modulation = "wbfm"
 frequency_mhz = 100.100
+gain = 20.0 # Illustrative only; choose for your receiver.
 
 [sources.broadcast_am]
 type = "sdr"
 modulation = "am"
 frequency_mhz = 1.053
 direct_sampling = true
+gain = 20.0 # Illustrative only; choose for your receiver.
 ```
 
 A freshly seeded config has all of these commented out, so a new install stays on the offline `generated` alarm and contacts nothing until you ask it to. The frequencies above are arbitrary placeholders rather than recommendations.
@@ -227,6 +231,56 @@ A freshly seeded config has all of these commented out, so a new install stays o
 | `am` | AM: the broadcast and shortwave bands | see `direct_sampling` |
 
 Broadcast FM is wideband, so a broadcast station tuned as `nbfm` comes through as noise or near-silence; that is what `wbfm` is for. AM broadcast sits below the roughly 24 MHz floor of a bare RTL-SDR tuner, which reaches it only through its direct-sampling branch — set `direct_sampling = true`, or put an upconverter in front. `type = "sdr_weatherband"` still parses as `type = "sdr"` with `nbfm`.
+
+### Set up SDR gain
+
+SDR sources require an explicit numeric `gain` in dB. Missing gain and the old
+`gain = "auto"` setting prevent an SDR alarm from being armed. Quoted numeric
+values remain accepted. Receiver gain is separate from playback `volume`;
+there is no gain setting recommended for every receiver. Gain is passed in
+tenths of a dB; additional decimal places are truncated toward zero.
+
+1. Run the optional wizard for a configured source or built-in preset:
+
+   ```sh
+   nixalarm --configure-source weatherband_162_400
+   ```
+
+   Add `--config PATH` to use a different config. The wizard requires an
+   interactive terminal, asks for gain, and prints TOML after confirmation.
+   It does not access hardware, create or edit files, or arm an alarm.
+   Do not redirect its output over your config file: the shell would truncate
+   that file before the wizard reads it.
+
+2. Apply the printed instructions to the indicated config file. For an existing
+   source section, add or replace its `gain` assignment without duplicating the
+   section. For a built-in preset, add the complete printed section: defining a
+   source section replaces the preset, so a gain-only section is insufficient.
+
+3. Test reception before relying on the alarm:
+
+   ```sh
+   nixalarm --test-source weatherband_162_400
+   ```
+
+   An accepted gain is syntactically valid, not hardware-tested. Choose the value
+   for your receiver and reception conditions. Direct-sampling hardware may not
+   apply tuner gain in the same way.
+
+4. Select the source when scheduling an alarm:
+
+   ```sh
+   nixalarm --source weatherband_162_400 07:30
+   ```
+
+   The wizard and `--test-source` do not change the default alarm source. To
+   select it persistently, set `alarm_source = "weatherband_162_400"` at the top
+   level of your config, before any section headers.
+
+Normal launches never prompt. Invalid gain in the selected SDR source or a
+reachable SDR fallback is reported before arming; unrelated unused SDR sources
+do not block startup. Help, source listing, and clock-only operation do not
+require SDR gain setup.
 
 ## Built-in sources
 
