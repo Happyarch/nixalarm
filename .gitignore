@@ -10,6 +10,13 @@ compile_commands.json
 .codex/
 .opencode/
 .claude/
+
+# Local agent harness configuration. These are workstation-specific and must
+# not be published to everyone who clones the project.
+.agents/
+.mcp.json
+opencode.json
+opencode.jsonc
 pkg/
 packaging/arch/pkg/
 packaging/arch/src/
