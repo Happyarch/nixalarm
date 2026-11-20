@@ -1,6 +1,6 @@
 # Maintainer: happyarch
 pkgname=nixalarm
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc='Small Linux alarm clock with seven-segment, nixie, analog, and sundial displays and file, stream, and optional SDR audio sources'
 arch=('x86_64' 'aarch64' 'armv7h' 'riscv64' 'loong64')
@@ -15,6 +15,11 @@ source=()
 sha256sums=()
 
 build() {
+  # The attached x86_64 package must not inherit makepkg.conf's native -march.
+  if [[ $CARCH == x86_64 ]]; then
+    export CFLAGS="-march=x86-64-v3 -mtune=generic -O2 -pipe"
+    export CXXFLAGS="$CFLAGS"
+  fi
   cmake -S "$startdir/../.." -B "$srcdir/build" \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
